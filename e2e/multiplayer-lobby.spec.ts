@@ -205,3 +205,62 @@ test.describe("Multiplayer lobby — JOURNEY-002 / BUG-1: Guest join enables Sta
     await guestPage.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-3 REGRESSION: DO hibernation between host-create and guest-join.
+//
+// The original e2e suite passed while the bug was live because host-create and
+// guest-join happened milliseconds apart, so the Durable Object never idled long
+// enough to hibernate. The real-world repro includes human delay (host copies the
+// link, switches tabs, pastes). These tests insert that delay explicitly.
+//
+// Before the fix: roomState (in-memory only) reset to null on hibernation, so the
+// guest was made host of a fresh empty room and the real host was orphaned —
+// the host's Start button stayed disabled and the guest waited for itself.
+// ---------------------------------------------------------------------------
+
+test.describe("Multiplayer lobby — BUG-3: state survives DO hibernation", () => {
+  const IDLE_MS = 12_000; // comfortably beyond the DO idle-hibernation threshold
+
+  test("host stays host and Start enables when guest joins after an idle gap", async ({ page, context }) => {
+    test.setTimeout(60_000);
+
+    const inviteUrl = await hostCreateRoom(page, "HostAlice");
+
+    // Simulate the host copying the link and switching tabs. The DO goes idle
+    // and hibernates during this window.
+    await page.waitForTimeout(IDLE_MS);
+
+    const guestPage = await guestJoinRoom(context, inviteUrl, "GuestBob");
+
+    // The guest must NOT have been promoted to host of a new room.
+    await expect(guestPage.getByText(/waiting for host to start/i)).toBeVisible({ timeout: 8000 });
+
+    // The host must still see itself plus the guest, and Start must enable.
+    await expect(page.locator(".lb-mp-player-list")).toContainText("HostAlice", { timeout: 8000 });
+    await expect(page.locator(".lb-mp-player-list")).toContainText("GuestBob", { timeout: 8000 });
+    await expect(page.getByText(/2\/4 players/i)).toBeVisible({ timeout: 8000 });
+    await expect(page.getByRole("button", { name: /start game/i })).toBeEnabled({ timeout: 8000 });
+
+    await guestPage.close();
+  });
+
+  test("host can start the round after an idle gap", async ({ page, context }) => {
+    test.setTimeout(60_000);
+
+    const inviteUrl = await hostCreateRoom(page, "HostAlice");
+    await page.waitForTimeout(IDLE_MS);
+    const guestPage = await guestJoinRoom(context, inviteUrl, "GuestBob");
+
+    const startBtn = page.getByRole("button", { name: /start game/i });
+    await expect(startBtn).toBeEnabled({ timeout: 8000 });
+    await startBtn.click();
+
+    // Both clients must reach the live round — proves the DO accepted the
+    // start message from the rehydrated host slot.
+    await expect(page.locator(".lb-mp-grid")).toBeVisible({ timeout: 10_000 });
+    await expect(guestPage.locator(".lb-mp-grid")).toBeVisible({ timeout: 10_000 });
+
+    await guestPage.close();
+  });
+});

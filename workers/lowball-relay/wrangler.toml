@@ -20,7 +20,7 @@ class_name = "LowballRelayDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["LowballRelayDO"]
+new_sqlite_classes = ["LowballRelayDO"]
 
 # Optional: override relay base URL for invite link construction (used in DEPLOYMENT.md)
 # Uncomment after deploying and set to your workers.dev subdomain.

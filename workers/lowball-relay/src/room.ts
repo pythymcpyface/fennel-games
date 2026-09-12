@@ -87,17 +87,70 @@ const MAX_TIEBREAK_ROUNDS = 2;
 // Durable Object class
 // ---------------------------------------------------------------------------
 
+/** Storage key for the persisted room state. */
+const ROOM_STATE_KEY = "roomState";
+
+/**
+ * JSON-safe mirror of RoomState. `usedWords` is a Set on the live object,
+ * which does not survive JSON serialization, so it is stored as an array.
+ */
+interface PersistedRoomState extends Omit<RoomState, "players"> {
+  players: (Omit<PlayerRecord, "usedWords"> & { usedWords: string[] })[];
+}
+
+function toPersisted(state: RoomState): PersistedRoomState {
+  return {
+    ...state,
+    players: state.players.map((p) => ({ ...p, usedWords: [...p.usedWords] })),
+  };
+}
+
+function fromPersisted(state: PersistedRoomState): RoomState {
+  return {
+    ...state,
+    players: state.players.map((p) => ({ ...p, usedWords: new Set(p.usedWords) })),
+  };
+}
+
 export class LowballRelayDO implements DurableObject {
   private state: DurableObjectState;
   private roomState: RoomState | null = null;
   private puzzle: Puzzle | null = null;
+  /** True once roomState has been hydrated from storage in this wake cycle. */
+  private loaded = false;
   // NOTE: wsToSlot removed — plain Map is lost on DO hibernation.
-  // Slot indices are now stored via ws.serializeAttachment() and read with
-  // ws.deserializeAttachment() so they survive across hibernation/wake cycles.
-  // (REQ-FIX-001 / BUG-1 root cause fix)
+  // Slot indices are stored via ws.serializeAttachment() / deserializeAttachment().
+  //
+  // REQ-FIX-002 / BUG-3: roomState itself must ALSO survive hibernation. It was
+  // previously an in-memory-only field, so when the DO hibernated (which happens
+  // within seconds of idle — e.g. the host switching tabs to copy the invite link)
+  // roomState reset to null while the sockets stayed open. The next joiner was then
+  // treated as a brand-new host in an empty room, orphaning the real host.
+  // roomState is now persisted to DO storage on every mutation and rehydrated on wake.
 
   constructor(state: DurableObjectState) {
     this.state = state;
+  }
+
+  // =========================================================================
+  // State persistence (REQ-FIX-002)
+  // =========================================================================
+
+  /** Hydrate roomState from storage. Must be awaited before any handler reads it. */
+  private async load(): Promise<void> {
+    if (this.loaded) return;
+    const stored = await this.state.storage.get<PersistedRoomState>(ROOM_STATE_KEY);
+    this.roomState = stored ? fromPersisted(stored) : null;
+    this.loaded = true;
+  }
+
+  /** Persist the current roomState. Call after every mutation. */
+  private async save(): Promise<void> {
+    if (this.roomState === null) {
+      await this.state.storage.delete(ROOM_STATE_KEY);
+      return;
+    }
+    await this.state.storage.put(ROOM_STATE_KEY, toPersisted(this.roomState));
   }
 
   // =========================================================================
@@ -106,6 +159,10 @@ export class LowballRelayDO implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // REQ-FIX-002: hydrate persisted state before ANY decision that depends on it
+    // (notably the isHost determination below).
+    await this.load();
 
     // Lightweight probe used by the Worker to check room existence (REQ-007)
     if (url.pathname.startsWith("/probe/")) {
@@ -187,8 +244,9 @@ export class LowballRelayDO implements DurableObject {
 
     this.roomState = { ...this.roomState, players: [...this.roomState.players, player] };
     // REQ-FIX-001: persist slot index on the WS so it survives DO hibernation.
-    // Previously used a plain Map (this.wsToSlot) which was wiped on every wake.
     (server as unknown as { serializeAttachment(v: unknown): void }).serializeAttachment({ slotIndex });
+    // REQ-FIX-002: persist the roster so the next wake sees this player.
+    await this.save();
 
     // Confirm join to the new player
     const joinMsg: ServerMessage = {
@@ -216,7 +274,7 @@ export class LowballRelayDO implements DurableObject {
   // WebSocket Hibernation API handlers
   // =========================================================================
 
-  webSocketMessage(ws: WebSocket, messageData: string | ArrayBuffer): void {
+  async webSocketMessage(ws: WebSocket, messageData: string | ArrayBuffer): Promise<void> {
     // REQ-057: guard against non-string frames
     if (typeof messageData !== "string") {
       ws.send(JSON.stringify({ type: "error", reason: "Binary frames not supported" } satisfies ServerMessage));
@@ -237,6 +295,9 @@ export class LowballRelayDO implements DurableObject {
       return;
     }
 
+    // REQ-FIX-002: rehydrate state before handling (DO may have hibernated).
+    await this.load();
+
     // REQ-FIX-001: read slotIndex from WS attachment (survives hibernation).
     const attachment = (ws as unknown as { deserializeAttachment(): unknown }).deserializeAttachment() as { slotIndex?: number } | null;
     const slotIndex = attachment?.slotIndex;
@@ -253,9 +314,15 @@ export class LowballRelayDO implements DurableObject {
         // Unknown message type — no-op
         break;
     }
+
+    // REQ-FIX-002: persist any mutation the handler made.
+    await this.save();
   }
 
-  webSocketClose(ws: WebSocket, code: number, reason: string): void {
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    // REQ-FIX-002: rehydrate before mutating.
+    await this.load();
+
     // REQ-FIX-001: read slotIndex from attachment (survives hibernation).
     const attachment = (ws as unknown as { deserializeAttachment(): unknown }).deserializeAttachment() as { slotIndex?: number } | null;
     const slotIndex = attachment?.slotIndex;
@@ -280,11 +347,21 @@ export class LowballRelayDO implements DurableObject {
         console.log(`[lowball-relay] host-left roomCode=${this.roomState.roomCode}`);
       }
     }
+
+    // If nobody is left connected, drop the room entirely so a stale roster
+    // cannot outlive the session and block a fresh room on the same code.
+    const anyConnected = this.roomState.players.some((p) => p.isConnected);
+    if (!anyConnected) {
+      this.roomState = null;
+      console.log(`[lowball-relay] room-empty — state cleared`);
+    }
+
+    await this.save();
   }
 
-  webSocketError(ws: WebSocket, error: unknown): void {
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     console.error("[lowball-relay] ws error", error);
-    this.webSocketClose(ws, 1011, "error");
+    await this.webSocketClose(ws, 1011, "error");
   }
 
   // =========================================================================
@@ -292,6 +369,8 @@ export class LowballRelayDO implements DurableObject {
   // =========================================================================
 
   async alarm(): Promise<void> {
+    // REQ-FIX-002: the alarm fires on a cold DO after hibernation — hydrate first.
+    await this.load();
     if (this.roomState === null) return;
 
     const phase = this.roomState.phase;
@@ -303,6 +382,7 @@ export class LowballRelayDO implements DurableObject {
     console.log(`[lowball-relay] sweep-completed sweepIndex=${this.roomState.sweepIndex} phase=${phase}`);
 
     await this.advanceSweepOrEnd();
+    await this.save();
   }
 
   // =========================================================================
@@ -344,8 +424,22 @@ export class LowballRelayDO implements DurableObject {
   // Handle submission (REQ-015, REQ-016, REQ-017, REQ-020, REQ-053)
   // =========================================================================
 
+  /**
+   * Resolve the active puzzle. `this.puzzle` is an in-memory cache that is lost
+   * on hibernation, so fall back to looking it up from the persisted puzzleId.
+   * (REQ-FIX-002)
+   */
+  private activePuzzle(): Puzzle | null {
+    if (this.puzzle !== null) return this.puzzle;
+    const pid = this.roomState?.puzzleId;
+    if (!pid) return null;
+    this.puzzle = CONTENT_PACK.puzzles.find((p) => p.puzzleId === pid) ?? null;
+    return this.puzzle;
+  }
+
   private handleSubmit(ws: WebSocket, slotIndex: number, rawWord: string): void {
-    if (this.roomState === null || this.puzzle === null) return;
+    const puzzle = this.activePuzzle();
+    if (this.roomState === null || puzzle === null) return;
 
     const phase = this.roomState.phase;
     // REQ-020: reject submissions outside active sweep
@@ -366,7 +460,7 @@ export class LowballRelayDO implements DurableObject {
     }
 
     // REQ-015: authoritative scoring (REQ-021 + REQ-025 handled inside scoreSubmission)
-    const record = scoreSubmission(rawWord, this.puzzle, player.usedWords);
+    const record = scoreSubmission(rawWord, puzzle, player.usedWords);
 
     // REQ-053: track used words
     const updatedPlayer = recordUsedWord(player, record.submittedWord);
@@ -507,7 +601,7 @@ export class LowballRelayDO implements DurableObject {
   }
 
   private async evaluateRoundEnd(): Promise<void> {
-    if (this.roomState === null || this.puzzle === null) return;
+    if (this.roomState === null || this.activePuzzle() === null) return;
 
     const totals = computeRoundTotals(this.roomState.players);
     const result = determineWinner(totals);
