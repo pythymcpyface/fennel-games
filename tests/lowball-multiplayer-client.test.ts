@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildWsUrl,
+  buildHttpUrl,
   normalizeRoomCode,
   validateDisplayName,
   serializeClientMessage,
@@ -25,6 +26,32 @@ describe("buildWsUrl — REQ-038, REQ-036", () => {
   it("handles trailing slash in base URL", () => {
     const url = buildWsUrl("wss://relay.example.workers.dev/", "DEF456");
     expect(url).toBe("wss://relay.example.workers.dev/room/DEF456");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildHttpUrl — converts wss:// base to https:// for REST calls
+// ---------------------------------------------------------------------------
+
+describe("buildHttpUrl", () => {
+  it("converts wss:// to https:// for the /create endpoint", () => {
+    expect(buildHttpUrl("wss://relay.example.workers.dev", "/create"))
+      .toBe("https://relay.example.workers.dev/create");
+  });
+
+  it("converts ws:// to http:// for local dev", () => {
+    expect(buildHttpUrl("ws://127.0.0.1:8787", "/create"))
+      .toBe("http://127.0.0.1:8787/create");
+  });
+
+  it("leaves https:// unchanged", () => {
+    expect(buildHttpUrl("https://relay.example.workers.dev", "/create"))
+      .toBe("https://relay.example.workers.dev/create");
+  });
+
+  it("strips trailing slash from base before appending path", () => {
+    expect(buildHttpUrl("wss://relay.example.workers.dev/", "/create"))
+      .toBe("https://relay.example.workers.dev/create");
   });
 });
 

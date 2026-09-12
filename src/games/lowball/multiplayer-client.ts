@@ -34,6 +34,18 @@ export function buildWsUrl(relayBase: string, roomCode: string): string {
   return `${base}/room/${roomCode}`;
 }
 
+/**
+ * Convert a wss:// or ws:// relay base URL to its https:// / http:// equivalent
+ * for plain HTTP REST calls (e.g. POST /create).
+ * The VITE_RELAY_URL env var is intentionally set as wss:// so the WS path works
+ * without any extra config — this helper makes the HTTP path work too.
+ */
+export function buildHttpUrl(relayBase: string, path: string): string {
+  const base = relayBase.endsWith("/") ? relayBase.slice(0, -1) : relayBase;
+  const httpBase = base.replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://");
+  return `${httpBase}${path}`;
+}
+
 // ---------------------------------------------------------------------------
 // REQ-046: Room code normalization (client-side, before WS open)
 // ---------------------------------------------------------------------------

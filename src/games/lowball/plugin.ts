@@ -21,6 +21,7 @@ import {
   validateDisplayName,
   normalizeRoomCode,
   buildWsUrl,
+  buildHttpUrl,
   type ClientEvent,
   type MpLeaderboardEntry,
 } from "./multiplayer-client.ts";
@@ -849,7 +850,9 @@ class Lowball implements GameInstance {
   /** POST /create to Worker, then open WS. */
   private async createAndConnectRoom(displayName: string): Promise<void> {
     try {
-      const res = await fetch(`${RELAY_BASE_URL}/create`, { method: "POST" });
+      // Use https:// for the REST call even though RELAY_BASE_URL is wss://
+      const createUrl = buildHttpUrl(RELAY_BASE_URL, "/create");
+      const res = await fetch(createUrl, { method: "POST" });
       if (!res.ok) throw new Error(`create failed: ${res.status}`);
       const body = await res.json() as { roomCode: string };
       const code = body.roomCode as string;
