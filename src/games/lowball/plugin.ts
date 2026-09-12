@@ -819,14 +819,35 @@ class Lowball implements GameInstance {
         copyBtn.type = "button";
         copyBtn.setAttribute("aria-label", "Copy invite link to clipboard");
         copyBtn.addEventListener("click", () => {
-          // BUG-FIX (Bug 2): write directly to clipboard rather than going through
-          // SharePort (which passes the URL as `text` to navigator.share, causing
-          // browser rejection). Also use this.live (always current) not the closure
-          // `live` (which may be detached if renderLobby re-ran since click).
-          void navigator.clipboard.writeText(inviteUrl).then(
-            () => { this.live.textContent = "Link copied."; },
-            () => { this.live.textContent = "Copy failed — paste the link manually."; },
-          );
+          // Try the modern Clipboard API first; fall back to execCommand which
+          // works in all browser contexts including Capacitor WebViews and older
+          // browsers where navigator.clipboard may be undefined or restricted.
+          const fallbackCopy = () => {
+            try {
+              const ta = document.createElement("textarea");
+              ta.value = inviteUrl;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              ta.style.top = "0";
+              document.body.appendChild(ta);
+              ta.focus();
+              ta.select();
+              const ok = document.execCommand("copy");
+              document.body.removeChild(ta);
+              this.live.textContent = ok ? "Link copied." : "Copy failed — paste manually.";
+            } catch {
+              this.live.textContent = "Copy failed — paste manually.";
+            }
+          };
+
+          if (typeof navigator.clipboard?.writeText === "function") {
+            navigator.clipboard.writeText(inviteUrl).then(
+              () => { this.live.textContent = "Link copied."; },
+              fallbackCopy,
+            );
+          } else {
+            fallbackCopy();
+          }
         });
         this.root.append(copyBtn);
       } else {
