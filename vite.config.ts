@@ -32,8 +32,16 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      registerType: "prompt",
+      // "prompt" required every tab to be closed before a new build activated,
+      // with no prompt UI wired up — so returning visitors were served a stale
+      // cached bundle indefinitely and never received deployed fixes.
+      // autoUpdate + skipWaiting/clientsClaim activates the new SW immediately.
+      registerType: "autoUpdate",
       injectRegister: "auto",
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+      },
       manifest: {
         name: "Fennel Games",
         short_name: "Fennel Games",
