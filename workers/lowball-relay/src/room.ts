@@ -196,8 +196,9 @@ export class LowballRelayDO implements DurableObject {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    // REQ-006: room capacity
-    const connectedCount = this.state.getWebSockets().length;
+    // REQ-006: room capacity — count CONNECTED players in the roster rather than
+    // raw socket count, which can include sockets that are already closing.
+    const connectedCount = this.roomState?.players.filter((p) => p.isConnected).length ?? 0;
     if (connectedCount >= MAX_PLAYERS) {
       const { 0: client, 1: server } = new WebSocketPair();
       this.state.acceptWebSocket(server);
@@ -211,7 +212,6 @@ export class LowballRelayDO implements DurableObject {
     this.state.acceptWebSocket(server);
 
     // Initialise room state on first connection
-    const isHost = this.roomState === null;
     if (this.roomState === null) {
       const roomCode = url.pathname.split("/").pop() ?? "XXXXXX";
       this.roomState = {
@@ -231,7 +231,24 @@ export class LowballRelayDO implements DurableObject {
     // REQ-051: disambiguate duplicate display names
     const resolvedName = disambiguateDisplayName(displayName, existingNames);
 
-    const slotIndex = this.roomState.players.length; // 0-based, max 3
+    // REQ-FIX-003: derive the slot from the lowest FREE index, not players.length.
+    // decrPlayerCount marks departed players isConnected:false but keeps the record,
+    // so players.length counts ghosts and would hand out a colliding slotIndex —
+    // shadowing a live player (and making broadcastPlayerList, which filters on
+    // isConnected, report a smaller count than reality).
+    const usedSlots = new Set(
+      this.roomState.players.filter((p) => p.isConnected).map((p) => p.slotIndex),
+    );
+    let slotIndex = 0;
+    while (usedSlots.has(slotIndex)) slotIndex += 1;
+
+    // REQ-FIX-003: host is whoever currently holds the host flag among CONNECTED
+    // players. Deriving it from `roomState === null` was fragile: any state loss
+    // silently promoted an arriving guest to host and orphaned the real one.
+    // Electing only when no connected host exists makes that impossible.
+    const hasLiveHost = this.roomState.players.some((p) => p.isConnected && p.isHost);
+    const isHost = !hasLiveHost;
+
     const player: PlayerRecord = {
       slotIndex,
       displayName: resolvedName,
@@ -242,7 +259,10 @@ export class LowballRelayDO implements DurableObject {
       isConnected: true,
     };
 
-    this.roomState = { ...this.roomState, players: [...this.roomState.players, player] };
+    // REQ-FIX-003: drop any stale record occupying this slot before re-adding,
+    // so repeated join/leave cycles cannot accumulate ghost players.
+    const withoutStale = this.roomState.players.filter((p) => p.slotIndex !== slotIndex);
+    this.roomState = { ...this.roomState, players: [...withoutStale, player] };
     // REQ-FIX-001: persist slot index on the WS so it survives DO hibernation.
     (server as unknown as { serializeAttachment(v: unknown): void }).serializeAttachment({ slotIndex });
     // REQ-FIX-002: persist the roster so the next wake sees this player.

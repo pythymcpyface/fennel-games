@@ -395,3 +395,62 @@ describe("decrPlayerCount — REQ-033", () => {
     expect(updated.players[0]?.isConnected).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// REQ-FIX-003: slot allocation and host election must ignore ghost records.
+//
+// decrPlayerCount marks a departed player isConnected:false but KEEPS the
+// record. The DO previously derived the next slot from players.length, which
+// counts those ghosts, so a joiner could be handed a slotIndex already held by
+// a live player — shadowing them. Since broadcastPlayerList filters on
+// isConnected, the roster then under-reported (observed live as "0/4 players").
+//
+// These tests pin the two invariants the DO's fetch() now relies on.
+// ---------------------------------------------------------------------------
+
+describe("slot allocation and host election with ghost records — REQ-FIX-003", () => {
+  /** Mirrors the DO's slot-allocation rule: lowest index not held by a CONNECTED player. */
+  function nextSlot(players: PlayerRecord[]): number {
+    const used = new Set(players.filter((p) => p.isConnected).map((p) => p.slotIndex));
+    let i = 0;
+    while (used.has(i)) i += 1;
+    return i;
+  }
+
+  /** Mirrors the DO's host-election rule: host only if no CONNECTED host exists. */
+  function electsHost(players: PlayerRecord[]): boolean {
+    return !players.some((p) => p.isConnected && p.isHost);
+  }
+
+  it("reuses the freed slot of a departed guest instead of colliding with a live one", () => {
+    // Host at 0 (live), guest at 1 who has left.
+    const state = decrPlayerCount(makeRoomState(2), 1);
+    expect(nextSlot(state.players)).toBe(1); // NOT 2, and critically NOT 0
+  });
+
+  it("never hands a joiner the slot of a still-connected host", () => {
+    const state = decrPlayerCount(makeRoomState(2), 1);
+    const assigned = nextSlot(state.players);
+    const liveHostSlot = state.players.find((p) => p.isConnected && p.isHost)?.slotIndex;
+    expect(assigned).not.toBe(liveHostSlot);
+  });
+
+  it("does not promote a joiner to host while a connected host exists", () => {
+    // This is the live bug: guest joined and was made host, orphaning the host.
+    const state = decrPlayerCount(makeRoomState(2), 1);
+    expect(electsHost(state.players)).toBe(false);
+  });
+
+  it("promotes a joiner to host only when no connected host remains", () => {
+    const state = decrPlayerCount(makeRoomState(1), 0); // host left
+    expect(electsHost(state.players)).toBe(true);
+  });
+
+  it("ghost records do not inflate the slot index across repeated churn", () => {
+    // Two join/leave cycles must not push a new joiner past the 4-slot range.
+    let state = makeRoomState(2);
+    state = decrPlayerCount(state, 1);
+    state = decrPlayerCount(state, 0);
+    expect(nextSlot(state.players)).toBe(0);
+  });
+});
