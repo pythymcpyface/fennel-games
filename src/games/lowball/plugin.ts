@@ -284,8 +284,11 @@ class Lowball implements GameInstance {
   }
 
   render(): void {
-    // REQ-036: if in multiplayer mode, delegate to the MP views
-    if (this.mpState.phase !== "idle") {
+    // REQ-036: delegate to MP views when in multiplayer mode.
+    // phase "idle" with a roomCode means guest arrived via invite link —
+    // show the name-entry lobby (pre-connection) rather than single-player.
+    const isMpMode = this.mpState.phase !== "idle" || this.mpState.roomCode !== "";
+    if (isMpMode) {
       if (this.mpState.phase === "round-done") {
         this.renderLeaderboard();
       } else if (this.mpState.phase === "round-active") {
@@ -526,11 +529,15 @@ class Lowball implements GameInstance {
   // Single-player render() above is completely untouched (REQ-037).
   // ===========================================================================
 
-  /** REQ-036: called from init() when svc.roomCode is present (join flow). */
+  /** REQ-036: called from init() when svc.roomCode is present (join flow).
+   * Sets phase to "idle" so renderLobby shows the name-entry form with the
+   * room code pre-filled. The WS connection opens only after the guest
+   * types their name and clicks "Join Room". (BUG-FIX: was "lobby-wait",
+   * which skipped the name form entirely.)
+   */
   private startMpJoin(roomCode: string): void {
-    this.mpState = { ...freshMpState(), phase: "lobby-wait", roomCode };
+    this.mpState = { ...freshMpState(), phase: "idle", roomCode };
     this.renderLobby();
-    // Show name form immediately — connect after name is entered
   }
 
   /** REQ-009 (Create Room): called from lobby UI "Host a game" button. */
@@ -561,6 +568,7 @@ class Lowball implements GameInstance {
       case "joined":
         this.mpState = {
           ...this.mpState,
+          phase: "lobby-wait",  // transition out of idle pre-connection state
           mySlotIndex: event.slotIndex,
           isHost: event.isHost,
           myDisplayName: event.displayName,
@@ -811,9 +819,14 @@ class Lowball implements GameInstance {
         copyBtn.type = "button";
         copyBtn.setAttribute("aria-label", "Copy invite link to clipboard");
         copyBtn.addEventListener("click", () => {
-          void this.svc.share.share(inviteUrl).then((r) => {
-            live.textContent = r.ok ? "Link copied." : "Copy failed.";
-          });
+          // BUG-FIX (Bug 2): write directly to clipboard rather than going through
+          // SharePort (which passes the URL as `text` to navigator.share, causing
+          // browser rejection). Also use this.live (always current) not the closure
+          // `live` (which may be detached if renderLobby re-ran since click).
+          void navigator.clipboard.writeText(inviteUrl).then(
+            () => { this.live.textContent = "Link copied."; },
+            () => { this.live.textContent = "Copy failed — paste the link manually."; },
+          );
         });
         this.root.append(copyBtn);
       } else {
