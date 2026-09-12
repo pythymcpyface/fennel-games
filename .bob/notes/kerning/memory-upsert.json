@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:kerning",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Kerning - **Definition:** The daily word puzzle game mode where a player re-inserts spaces into a fixed letter sequence to transform shown segmentation (**TERM-006 Reading A**",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Person playing the daily Kerning puzzle in the hub UI. | | ROLE-002 | Hub Host | System | CIC Games",
+    "Requirements: ### REQ-001: Deterministic daily puzzle selection - **EARS Pattern:** Event-Driven - **EARS Statement:** When the plugin core is started with **FIELD-003 hub_seed** and **FIELD-002 date_utc**, the **",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub Host (Runtime Shell) — *(TERM-002, ROLE-002)* - **Responsibilities**   - Loads and mounts the Kerning plugin via `GamePlugin.init(context)` (ENTRY-",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

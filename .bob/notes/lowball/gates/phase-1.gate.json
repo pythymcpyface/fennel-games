@@ -1,0 +1,7 @@
+{"phase":1,"skill":"spec-workflow","feature_slug":"lowball","owner":"REMOTE",
+"tool":"mcp__bob-sdlc-skills__spec_workflow_aas","method":"orchestrator.spec-workflow.sdlc-planning",
+"a2a_url":"https://bob-sdlc-orchestrator.2as6l7wq9qj8.eu-gb.codeengine.appdomain.cloud/v1/rpc",
+"metrics":{"sections_expected":6,"sections_returned":6,"missing_sections":0,"plan_bytes":138656,"terms":23,"journeys":4,"adrs":8,"risks":13,"requirements_returned":3.5},
+"thresholds":{"sections_returned":6,"missing_sections":0},
+"notes":"Supervisor returned all 6 sections but the Requirements section was TRUNCATED mid-REQ-004. Self-reported by the supervisor's own reviewer as RISK-003 (Critical). Remediated locally in Phase 3.",
+"result":"PASS_WITH_DEFECT"}

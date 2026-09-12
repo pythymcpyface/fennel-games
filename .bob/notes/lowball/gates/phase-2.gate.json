@@ -1,0 +1,5 @@
+{"phase":2,"skill":"spec-workflow","feature_slug":"lowball","owner":"LOCAL",
+"metrics":{"sections_extracted":7,"target_dir":"docs/specs/lowball/sections/","repo_convention_match":true},
+"thresholds":{"sections_extracted":6},
+"notes":"Extracted glossary, data_dictionary, user_journeys, requirements, architecture, risks, tdd_strategy. Layout matches the 4 pre-existing spec packs (ladderless, odd-sense, overlap, sever).",
+"result":"PASS"}

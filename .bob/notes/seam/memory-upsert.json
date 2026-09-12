@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:seam",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Seam - **Definition:** The daily linear-chain word game in the CIC Games hub where the player orders a fixed set of words so each adjacent pair forms a valid hidden link. - **",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | End user who plays the daily Seam puzzle and shares results. | | ROLE-002 | Hub Host | System | CIC",
+    "Requirements: ### REQ-001: Compute UTC puzzle identity - **EARS Pattern:** Event-Driven - **EARS Statement:** When the plugin is mounted via **TERM-019 GamePlugin**, the system shall compute **FIELD-001 utc_date**",
+    "Architecture: ## Components & Responsibilities  ### Seam GamePlugin (UI Shell) **Satisfies:** REQ-001..004, REQ-014..016, REQ-018, REQ-021; NFR-001..005   - **Responsibilities**   - Implement `mount(root, services",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

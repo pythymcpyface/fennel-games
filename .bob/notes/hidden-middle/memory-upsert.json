@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:hidden-middle",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Hidden Middle Game - **Definition:** The CIC Games hub plugin implementing the Hidden Middle daily word puzzle, including UI view and pure deterministic core logic. - **Synony",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily **TERM-005 Daily Puzzle**, enters **TERM-009 Guess**es, uses **TERM-023 Hint**, vie",
+    "Requirements: ### REQ-001: Compute deterministic PuzzleId - **EARS Pattern:** Event-Driven - **EARS Statement:** When the plugin is mounted (ENTRY-005), the Hidden Middle Game (TERM-001) shall compute FIELD-004 Pu",
+    "Architecture: ## Components & Responsibilities  ### Hidden Middle Plugin (GamePlugin Implementation) - **Responsibilities**   - Implement the **TERM-003 GamePlugin Contract** and provide the mounted view for route",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

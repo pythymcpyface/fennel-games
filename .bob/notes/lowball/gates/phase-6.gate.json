@@ -1,0 +1,22 @@
+{"phase":6,"skill":"spec-workflow","feature_slug":"lowball","owner":"LOCAL","complexity_class":"small","mode":"feature",
+"aggregate":{
+  "phase-0":"PASS",
+  "phase-1":"PASS_WITH_DEFECT",
+  "phase-2":"PASS",
+  "phase-3":"PASS_PENDING_WAIVER",
+  "phase-4":"PASS",
+  "phase-5":"PASS"
+},
+"metrics":{"phases_total":7,"phases_pass":5,"phases_pass_with_defect":1,"phases_pending_waiver":1,"phases_fail":0,
+"req_count":58,"ac_count":98,"scenarios":98,"feature_files":58,
+"journey_coverage":1.0,"req_coverage":1.0,"ac_coverage":1.0,"test_coverage":1.0,"blocking_open_questions":0},
+"thresholds":{"phases_fail":0,"blocking_open_questions":0,"ac_coverage":1.0,"test_coverage":1.0},
+"open_waivers":[{"id":"UNDERSIZE-WAIVER-journeys","phase":3,"floor":6,"actual":4,"status":"PENDING_USER_APPROVAL"}],
+"residual_risks_accepted":[
+ {"id":"RISK-002","severity":"Critical","reason":"Answer List is the sole runtime validator, a direct consequence of accepted ADR-002. Mitigation (secondary-wordlist cross-validation) is a build-pipeline lint; no REQ authored for v1."},
+ {"id":"RISK-005","severity":"High","reason":"Multi pack-version coexistence during service-worker transition windows unresolved; deferred to /start-project architecture phase."},
+ {"id":"RISK-006","severity":"Medium","reason":"GloVe provenance and checksum pinning is a build-setup documentation task, not a product requirement."}
+],
+"verdict":"PASS_PENDING_WAIVER",
+"notes":"Overall PASS is withheld only pending user approval of the journeys UNDERSIZE-WAIVER. Every quantitative gate threshold is met: zero FAIL phases, all four traceability coverage metrics at 1.0, zero blocking open questions, atomicity fixed point reached with zero violations. Phase 1 is marked PASS_WITH_DEFECT because the remote supervisor truncated its Requirements section mid-REQ-004; this was detected, self-reported as RISK-003, and fully remediated locally in Phase 3.",
+"result":"PASS_PENDING_WAIVER"}

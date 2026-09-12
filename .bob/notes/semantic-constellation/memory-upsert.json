@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:semantic-constellation",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Semantic Constellation - **Definition:** The daily Strands-style word game mode in cic-games featuring a 6x6 letter grid that is a perfect cover of answer words and includes t",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily Semantic Constellation puzzle (TERM-001) offline. | | ROLE-002 | Developer | Admin",
+    "Requirements: ### REQ-001: Register the game in the hub - **EARS Pattern:** Ubiquitous - **EARS Statement:** The hub registry (TERM-038) shall include a registration entry for Semantic Constellation (TERM-001). -",
+    "Architecture: ## Components & Responsibilities  ### Hub Registry (TERM-038) - **Responsibilities**   - Registers “Semantic Constellation” entry and routes `/games/semantic-constellation`. (REQ-001)   - Provides sh",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

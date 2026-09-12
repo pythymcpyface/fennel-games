@@ -1,0 +1,8 @@
+{"phase":5,"skill":"spec-workflow","feature_slug":"lowball","owner":"REMOTE",
+"tool":"mcp__bob-sdlc-skills__spec_workflow_traceability_matrix","method":"orchestrator.spec-workflow.traceability-matrix",
+"metrics":{"journey_coverage":1.0,"req_coverage":1.0,"ac_coverage":1.0,"test_coverage":1.0,"blocking_open_questions":0,
+"forward_coverage_issues":0,"backward_coverage_issues":0,"ac_scenario_1to1_violations":0,"orphans":0,"duplicate_mappings":0},
+"thresholds":{"journey_coverage":1.0,"req_coverage":1.0,"ac_coverage":1.0,"test_coverage":1.0,"blocking_open_questions":0},
+"artifacts":["TRACEABILITY-MATRIX.md","VERIFICATION-REPORT.md"],
+"notes":"Regenerated after Phase-4 remediation. First run scored ac_coverage 0.98 / test_coverage 0.99 and FAILED; second run after adding REQ-057/058 reported coverage 1.0 but 6 blocking semantic defects; final run is clean on all five metrics.",
+"result":"PASS"}

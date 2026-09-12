@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:lowball-multiplayer",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Lowball Game - **Definition:** An inverse-scoring word game where players submit words matching a category; lower panel scores are better; outcome determined by comparison to",
+    "User Journeys: ## Roles  | Role | Description | |---|---| | Host | Creates the Room, sets display name, invites guests, starts the game (TERM-009) | | Guest | Joins an existing Room via room code, sets display name",
+    "Requirements: ### REQ-001: Room Creation Generates Unique Room Code - **EARS Pattern:** Event-Driven - **EARS Statement:** When a Host submits a create-room request, the Multiplayer Relay System shall generate a u",
+    "Architecture: ## Components & Responsibilities  ### C1: Lowball Engine (existing, unmodified)  - Deterministic scoring functions: word validation, panel score lookup, verdict computation, round total accumulation,",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected Requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

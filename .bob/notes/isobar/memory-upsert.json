@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:isobar",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Isobar Puzzle - **Definition:** A deterministic daily game instance consisting of exactly five given words (TERM-002) that must be placed into concentric meaning rings (TERM-0",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily Isobar Puzzle (TERM-001), places words, submits, shares results | | ROLE-002 | Hub",
+    "Requirements: ### REQ-001: Derive UTC puzzle date - **EARS Pattern:** Ubiquitous - **EARS Statement:** The client shall derive FIELD-002 (utc_date) using UTC time (TERM-020). - **Inputs:** Device/system clock - **",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Adapter (Isobar Plugin Entry) - **Responsibilities**   - Implements `mount(root, services)` (TERM-014) and bootstraps the app.   - Wires hub-provided",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

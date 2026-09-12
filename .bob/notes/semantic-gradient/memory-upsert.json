@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:semantic-gradient",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Puzzle - **Definition:** A daily Semantic Gradient board consisting of a 6x6 letter grid, a hidden **Anchor** (TERM-005), a **Spangram** (TERM-006), four **Theme Words** (TERM",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily Puzzle (TERM-001) on web/PWA/mobile. | | ROLE-002 | Builder | Admin/Dev | Runs buil",
+    "Requirements: ### REQ-001: Register Semantic Gradient game plugin in hub - **EARS Pattern:** Ubiquitous - **EARS Statement:** The hub shall register the Semantic Gradient Game Plugin (TERM-028) under `FIELD-003 ga",
+    "Architecture: ## Components & Responsibilities  ### Hub Shell (cic-games) - **Responsibilities**   - Hosts routing and navigation for all games; mounts the Semantic Gradient plugin at `/games/semantic-gradient`. (",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

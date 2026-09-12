@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:per-game-flourishes",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: CIC Games Hub - **Definition:** The host application that lists and launches the 22 daily word-puzzle games via per-game plugin views. - **Synonyms:** Hub, Games hub, CIC hub",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays a game in the hub and experiences flourishes. | | ROLE-002 | Player (Reduced Motion) | Primar",
+    "Requirements: ### REQ-001: Provide one bespoke flourish per game in the plugin view - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall implement exactly one TERM-009 Bespoke Visual Flourish per",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub Shell (TERM-001) - **Responsibilities**   - Routes to a selected game plugin view (EP-001).   - Loads shared styling layers (TERM-011) and shared C",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

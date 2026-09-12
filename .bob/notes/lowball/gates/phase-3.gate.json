@@ -1,0 +1,8 @@
+{"phase":3,"skill":"spec-workflow","feature_slug":"lowball","owner":"LOCAL","complexity_class":"small",
+"metrics":{"req_count":58,"ac_count":98,"atomic_pass_rate":1.0,"vague_word_violations":0,"schema_complete_rate":1.0,"ac_test_unique_rate":1.0,"blocking_open_questions":0,"refinement_passes":2,"fixed_point_reached":true,
+"sizing_floor_req":25,"sizing_actual_req":58,"sizing_floor_ac":50,"sizing_actual_ac":98,"sizing_floor_journeys":6,"sizing_actual_journeys":4},
+"thresholds":{"atomic_pass_rate":1.0,"vague_word_violations":0,"schema_complete_rate":1.0,"ac_test_unique_rate":1.0,"blocking_open_questions":0},
+"waivers":[{"id":"UNDERSIZE-WAIVER-journeys","metric":"journeys","floor":6,"actual":4,"status":"PENDING_USER_APPROVAL","rationale":"4 journeys cover every role-matrix actor and all 5 entry points; REQ and AC counts exceed their floors by 132% and 96%."}],
+"risks_closed":["RISK-001","RISK-003","RISK-004","RISK-007","RISK-008","RISK-010","RISK-011","RISK-012"],
+"adrs_resolved":["ADR-006","ADR-007","ADR-008"],
+"result":"PASS_PENDING_WAIVER"}

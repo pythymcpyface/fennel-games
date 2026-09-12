@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:ghost-group",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Ghost Group - **Definition:** The CIC Games hub daily word-grouping game where players sort 16 words into four groups of four, with three group labels shown upfront and the fo",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | End user who plays TERM-001 daily puzzle | | ROLE-002 | Games Hub Host | System | CIC Games hub she",
+    "Requirements: ### REQ-001: Determine daily puzzle date by UTC - **EARS Pattern:** Ubiquitous - **EARS Statement:** The Ghost Group client shall set FIELD-002 based on the current UTC date. - **Inputs:** System clo",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Entry (Ghost Group Plugin) - **Satisfies:** REQ-001..016, NFR-001..006 (as the client delivery unit) - **Responsibilities**   - Implement `mount(root,",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

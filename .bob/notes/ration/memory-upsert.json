@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:ration",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Ration - **Definition:** The CIC Games hub daily word-formation game where players create multiple words while consuming from a shared, limited letter inventory. - **Synonyms:",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the Daily Puzzle (TERM-002), submits words, views progress, shares results | | ROLE-002 | Hub",
+    "Requirements: ### REQ-001: Compute daily UTC puzzle date - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall compute `puzzle_date_utc` (FIELD-001) using the UTC Day Boundary (TERM-003). - **Input",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Shell (`ration-plugin`) - **Responsibilities**   - Implements `mount(root, services)` (TERM-022) and owns lifecycle: init, render, unmount.   - Wires",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

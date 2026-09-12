@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:sever",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Puzzle - **Definition:** The daily challenge consisting of a run-together letter string (**TERM-002**) and a single intended segmentation (**TERM-003**) derived from a curated",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily **TERM-001 Puzzle**, submits **TERM-008 Submissions**, uses **TERM-019 Hint**, view",
+    "Requirements: ### REQ-001: Deterministic daily puzzle selection - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall select the daily **TERM-004 Phrase** by applying **TERM-011 Deterministic Daily",
+    "Architecture: ## Components & Responsibilities  ### Functional Core (Pure Game Engine) — `@sever/core` - **Satisfies:** REQ-001..004, REQ-008..012, REQ-014..018, REQ-020..021, REQ-023; NFR-003 - **Responsibilities",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

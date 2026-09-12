@@ -1,0 +1,206 @@
+# Requirements
+
+### REQ-001: Reject profanity-blocklist matching via unanchored substring
+- **ID:** REQ-001
+- **Title:** Generator shall not exclude a corpus word from a category's answerList on the basis of an unanchored substring match against the Profanity Blocklist.
+- **EARS Pattern:** Unwanted
+- **EARS Statement:** The Build-Time Generator shall not exclude a corpus word from a category's answerList using an unanchored substring match against any Profanity Blocklist term.
+- **Inputs:** corpusWordList (FIELD-012), profanityBlockTerm (FIELD-013)
+- **Outputs:** answerList (FIELD-004)
+- **Preconditions:** Generator is executing profanity-filter pass (JOURNEY-002 Step 1).
+- **Postconditions:** No word is excluded solely because it contains a blocked term as a substring.
+- **Invariants:** Matching strategy is deterministic and identical across all generator runs for a fixed corpus + blocklist.
+- **Trigger:** Generator applies profanity filter to a candidate word.
+- **Actor:** Build-Time Generator
+- **EntityScope:** TERM-010 (Profanity Blocklist), TERM-015 (Corpus)
+- **ErrorModes:** ERR-A: word wrongly excluded (Scunthorpe false positive).
+- **NFR-Tags:** NFR-005 (auditability)
+- **Source:** JOURNEY-002 Step 1; EDGE-005; EDGE-006
+- **Dependencies:** REQ-002 (must still block genuine profanity)
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-001: Given corpus contains "grape" and blocklist contains "rape", when generator filters the "ape"-suffix category, then "grape" is present in answerList.
+  - TEST-002: Given corpus contains "shuttlecock", "peacock" and blocklist contains "cock", when generator filters relevant categories, then both words are present in answerList.
+  - TEST-003: Given corpus contains "serape", "undrape", "broomrape", "drape", "scrape", "crape", when filtered against "ape" suffix category, then all six are present in answerList.
+- **Assumptions:** Blocklist term list itself is otherwise correct/complete for genuine profanity.
+- **OpenQuestions:** None.
+
+### REQ-002: Genuine profanity must still be excluded from answers
+- **ID:** REQ-002
+- **Title:** Generator shall exclude a corpus word matching a genuine profanity term from any category's answerList.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a corpus word matches a Profanity Blocklist term under the whole-word-or-inflection matching strategy, the Build-Time Generator shall exclude that word from every category's answerList.
+- **Inputs:** corpusWordList (FIELD-012), profanityBlockTerm (FIELD-013)
+- **Outputs:** answerList (FIELD-004)
+- **Preconditions:** Matching strategy explicitly defined (see Assumptions) covering standalone forms and known inflections/compounds.
+- **Postconditions:** No genuinely offensive standalone, inflected, or compound form appears in any answerList.
+- **Invariants:** Matching strategy is the single source of truth used identically for answers and prompts (REQ-003).
+- **Trigger:** Generator evaluates a corpus word during profanity-filter pass.
+- **Actor:** Build-Time Generator
+- **EntityScope:** TERM-010, TERM-015
+- **ErrorModes:** ERR-B: genuine profane word wrongly admitted.
+- **NFR-Tags:** NFR-003 (security — content-safety control), NFR-005
+- **Source:** JOURNEY-003 Step 4; ERROR-006
+- **Dependencies:** REQ-001
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-004: Given corpus contains the standalone offensive term matched by blocklist entry "rape" (the word "rape" itself), when generator filters any category, then that word is absent from every answerList.
+  - TEST-005: Given corpus contains a known inflected form of a blocked term (e.g. plural/verb-inflected variant explicitly enumerated in the matching strategy), when generator filters, then that inflected form is absent from every answerList.
+  - TEST-006: Given corpus contains a compound form combining a genuinely offensive root with another word (explicitly enumerated in matching strategy as offensive), when generator filters, then that compound is absent from every answerList.
+- **Assumptions:** An explicit, documented, testable matching strategy exists (e.g. whole-word match plus an enumerated allowlist/denylist of specific inflections and compounds), not a naive `\bterm\b` regex alone, per the "must be stated explicitly and tested" instruction.
+- **OpenQuestions:** OQ-001: What is the exact enumerated list of inflections/compounds to additionally block beyond whole-word matches? Requires content-safety sign-off, not engineering-only decision.
+
+### REQ-003: Genuine profanity must be excluded from category prompts
+- **ID:** REQ-003
+- **Title:** Generator shall not produce a categoryPrompt containing a genuinely offensive term.
+- **EARS Pattern:** Unwanted
+- **EARS Statement:** The Build-Time Generator shall not produce a categoryPrompt containing a Profanity Blocklist term matched under the same strategy defined in REQ-002.
+- **Inputs:** affixValue (FIELD-003), profanityBlockTerm (FIELD-013)
+- **Outputs:** categoryPrompt (FIELD-002)
+- **Preconditions:** Category affix value is being rendered into a prompt string.
+- **Postconditions:** No shipped categoryPrompt contains a blocked term per REQ-002's strategy.
+- **Invariants:** Same matching strategy instance is reused (no separate/divergent prompt-only filter).
+- **Trigger:** Generator constructs a categoryPrompt for a candidate affix.
+- **Actor:** Build-Time Generator
+- **EntityScope:** TERM-018 (Category Prompt), TERM-010
+- **ErrorModes:** ERR-C: offensive term appears in a shipped prompt.
+- **NFR-Tags:** NFR-003, NFR-005
+- **Source:** "genuinely offensive words must not appear as answers or as category prompts"
+- **Dependencies:** REQ-002
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-007: Given a candidate affix value that is itself a blocked term, when generator builds the category list, then no categoryPrompt using that affix is emitted.
+  - TEST-008: Given all 120+ shipped categoryPrompts, when scanned against the REQ-002 matching strategy, then zero matches are found.
+- **Assumptions:** Category affix values are a small, enumerable, review-able set (suffixes/prefixes), making exhaustive pre-release scanning feasible.
+- **OpenQuestions:** None.
+
+### REQ-004: Build-time affix length rule must equal runtime affix length rule
+- **ID:** REQ-004
+- **Title:** Generator shall group a corpus word into a category using the identical length comparison used by the runtime matchesAffix predicate.
+- **EARS Pattern:** Ubiquitous
+- **EARS Statement:** The Build-Time Generator shall group a corpus word into an affix category only when word.length is strictly greater than affixValue.length.
+- **Inputs:** corpusWordList (FIELD-012), affixValue (FIELD-003)
+- **Outputs:** answerList (FIELD-004) membership decision
+- **Preconditions:** Generator is performing affix-grouping pass (JOURNEY-002 Step 2).
+- **Postconditions:** Build-time grouping decision for every word is identical to what `matchesAffix` would return at runtime for that word/affix pair.
+- **Invariants:** No length-offset constant is applied on the build-time side beyond the runtime formula.
+- **Trigger:** Generator evaluates a corpus word against a candidate affix value during grouping.
+- **Actor:** Build-Time Generator
+- **EntityScope:** TERM-008 (Affix Rule), TERM-015 (Corpus)
+- **ErrorModes:** ERR-D: word wrongly excluded by stricter build-time rule.
+- **NFR-Tags:** NFR-006 (reliability — named control: single-source-of-truth rule)
+- **Source:** JOURNEY-002 Step 2; Cause B
+- **Dependencies:** REQ-005 (agreement proof enforces this ongoing)
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-009: Given affixValue "ape" and corpus words cape, tape, gape, nape, jape, vape (length 4, affix length 3), when generator groups the "ape" category, then all six words are present in answerList.
+  - TEST-010: Given affixValue "ame" and corpus words came, dame, fame, game, lame, name, same, tame, when generator groups the "ame" category, then all eight words are present in answerList.
+  - TEST-011: Given affixValue "ough" and corpus words bough, cough, dough, rough, tough, when generator groups the "ough" category, then all five words are present in answerList.
+- **Assumptions:** `matchesAffix` itself (runtime) is correct and is not being changed by this fix; only the generator is being brought into agreement with it.
+- **OpenQuestions:** None.
+
+### REQ-005: Build-time and runtime acceptance rules must be provably identical for every shipped answer
+- **ID:** REQ-005
+- **Title:** CI Pipeline shall verify, for every category in the regenerated Content Pack, that build-time inclusion and runtime matchesAffix evaluation agree for every corpus word.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the CI Pipeline validates a regenerated Content Pack, the CI Pipeline shall verify that matchesAffix(word, affixValue) evaluates true for every word present in that category's answerList.
+- **Inputs:** answerList (FIELD-004), affixValue (FIELD-003)
+- **Outputs:** CI pass/fail result with named failing category/word
+- **Preconditions:** Content Pack has been regenerated (JOURNEY-002 complete).
+- **Postconditions:** Zero divergence exists between build-time membership and runtime `matchesAffix` result, in either direction (soundness and completeness).
+- **Invariants:** This check runs on every future pack regeneration, not only this fix (regression-proofing per the "provably identical from here on" requirement).
+- **Trigger:** CI Pipeline begins pack validation (JOURNEY-003 Step 3).
+- **Actor:** CI Pipeline
+- **EntityScope:** TERM-008, TERM-003 (Answer List)
+- **ErrorModes:** ERR-E: soundness failure (answerList contains a word matchesAffix rejects); ERR-F: completeness failure (a profanity-clean corpus word satisfies matchesAffix but is absent from answerList). *(Two distinct error modes are permitted here only as CI-diagnostic sub-codes of one check outcome; see REQ-006 for the split into atomic requirements.)*
+- **NFR-Tags:** NFR-005 (auditability), NFR-006 (reliability)
+- **Source:** JOURNEY-003 Step 3; BRANCH-004; BRANCH-005
+- **Dependencies:** REQ-004, REQ-006
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-012: Given the full regenerated Content Pack, when CI runs the agreement proof, then zero soundness failures are reported (see REQ-006 for completeness split).
+- **Assumptions:** `matchesAffix` source is importable/executable within the CI/build-time environment without requiring DOM/browser context (consistent with "runtime engine must stay pure").
+- **OpenQuestions:** None.
+- **Note:** This REQ is decomposed into REQ-006 and REQ-007 below to satisfy atomicity rule A8 (no more than one error mode per requirement); REQ-005 stated here for traceability to the source instruction and is superseded operationally by REQ-006/REQ-007.
+
+### REQ-006: Soundness — no answerList entry violates the runtime affix rule
+- **ID:** REQ-006
+- **Title:** CI Pipeline shall fail the release gate when an answerList entry does not satisfy matchesAffix.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When an answerList entry's word does not satisfy matchesAffix for its category's affixValue, the CI Pipeline shall fail the release gate.
+- **Inputs:** answerList (FIELD-004), affixValue (FIELD-003)
+- **Outputs:** CI failure record naming category and word
+- **Preconditions:** Content Pack loaded into CI validation context.
+- **Postconditions:** Release is blocked until zero such violations exist.
+- **Invariants:** Check is exhaustive across all categories and all answerList entries.
+- **Trigger:** CI evaluates matchesAffix for each answerList entry.
+- **Actor:** CI Pipeline
+- **EntityScope:** TERM-003, TERM-008
+- **ErrorModes:** ERR-E: soundness failure only.
+- **NFR-Tags:** NFR-005, NFR-006
+- **Source:** JOURNEY-003 Step 3; BRANCH-005
+- **Dependencies:** REQ-004
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-013: Given an answerList artificially seeded with one word failing matchesAffix (test fixture), when CI runs the soundness check, then CI fails and names that category and word.
+  - TEST-014: Given the real regenerated pack post-fix, when CI runs the soundness check, then CI reports zero violations across all categories.
+- **Assumptions:** None beyond REQ-005.
+- **OpenQuestions:** None.
+
+### REQ-007: Completeness — every eligible clean corpus word is present in its category's answerList
+- **ID:** REQ-007
+- **Title:** CI Pipeline shall fail the release gate when a profanity-clean corpus word satisfying matchesAffix is absent from its category's answerList.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a profanity-clean corpus word satisfies matchesAffix for a category's affixValue and that word is absent from the category's answerList, the CI Pipeline shall fail the release gate.
+- **Inputs:** corpusWordList (FIELD-012), affixValue (FIELD-003), answerList (FIELD-004)
+- **Outputs:** CI failure record naming category and missing word
+- **Preconditions:** Profanity filtering (REQ-001/REQ-002) has been applied to determine "clean" status independently.
+- **Postconditions:** Release is blocked until zero such omissions exist.
+- **Invariants:** Check is exhaustive across the full corpus for every category.
+- **Trigger:** CI evaluates every corpus word against every category's affixValue and profanity status.
+- **Actor:** CI Pipeline
+- **EntityScope:** TERM-003, TERM-008, TERM-015
+- **ErrorModes:** ERR-F: completeness failure only.
+- **NFR-Tags:** NFR-005, NFR-006
+- **Source:** JOURNEY-003 Step 3; BRANCH-004
+- **Dependencies:** REQ-001, REQ-004
+- **Priority:** P0 (Critical)
+- **AcceptanceCriteria:**
+  - TEST-015: Given the real regenerated pack, when CI runs the completeness check for the "ape" category, then grape, drape, scrape, crape, serape, undrape, broomrape, cape, tape, gape, nape, jape, vape are all present (13 of the 14 identified missing words; the 14th enumerated per exact corpus list at implementation time).
+  - TEST-016: Given the "ame" category, when CI runs the completeness check, then came, dame, fame, game, lame, name, same, tame are present (8 of the 11 identified; remainder per exact corpus list).
+  - TEST-017: Given the "ough" category, when CI runs the completeness check, then bough, cough, dough, rough, tough are present (5 of the 8 identified; remainder per exact corpus list).
+- **Assumptions:** The full enumerated 184-word list is available as a fixture derived from the bug report for exact test parameterization.
+- **OpenQuestions:** OQ-002: Should the 184-word list be committed as a permanent regression fixture file, or regenerated by diffing old/new packs at CI time? Recommend the former for stability.
+
+### REQ-008: Reported case must score its panel value, not the penalty
+- **ID:** REQ-008
+- **Title:** Runtime Engine shall score "grape" at its panel value when submitted for the "ape" category on the regenerated pack.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a Player submits "grape" as submittedWord during the `Words ending in "ape"` category, the Runtime Engine shall return the panelScore associated with "grape" in the category's answerList.
+- **Inputs:** submittedWord (FIELD-001) = "grape", answerList (FIELD-004)
+- **Outputs:** panelScore (FIELD-005)
+- **Preconditions:** Content Pack in use is the regenerated post-fix pack; round is active.
+- **Postconditions:** Displayed score for "grape" is its panelScore; is never invalidSubmissionPenalty (FIELD-007).
+- **Invariants:** Runtime lookup logic itself (JOURNEY-004) is unchanged by this fix — the defect is entirely upstream in the pack.
+- **Trigger:** Player submits "grape".
+- **Actor:** Runtime Engine
+- **EntityScope:** TERM-001 (Lowball), TERM-003, TERM-004
+- **ErrorModes:** ERR-G: "grape" scored 100.
+- **NFR-Tags:** none
+- **Source:** JOURNEY-001 Steps 1–5; reported symptom
+- **Dependencies:** REQ-001, REQ-007
+- **Priority:** P0 (Critical — exact reported bug)
+- **AcceptanceCriteria:**
+  - TEST-018: Given regenerated pack, category `Words ending in "ape"`, when Player submits "grape", then displayed score equals grape's panelScore and the UI does not show "Not in the answer list — scored 100."
+- **Assumptions:** None.
+- **OpenQuestions:** None.
+
+### REQ-009: Every regenerated category must satisfy the fairness gate
+- **ID:** REQ-009
+- **Title:** CI Pipeline shall fail the release gate when a category's answerList does not satisfy all six Fairness Gate rules.
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a category's answerList and parValue are evaluated after pack regeneration, the CI Pipeline shall fail the release gate if any one of the six Fairness Gate rules is not satisfied.
+- **Inputs:** answerList (FIELD-004), parValue (FIELD-006)
+- **Outputs:** CI failure record naming category and failed rule(s)
+- **Preconditions:** Pack has been regenerated per REQ-001–REQ-004.
+- **Postconditions:** Every

@@ -1,0 +1,192 @@
+{
+  "skill": "feature-dev",
+  "branch": "main",
+  "feature_slug": "lowball",
+  "complexity_class": "small",
+  "completed": "2026-09-10T20:00:15.080Z",
+  "deviation": {
+    "branch_per_feature": false,
+    "reason": "user directed in-place work on main at Phase 0"
+  },
+  "spec_workflow_gates": "PASS",
+  "implementation": {
+    "must_have_reqs_total": 55,
+    "must_have_reqs_complete": 55,
+    "should_have_reqs_total": 3,
+    "should_have_reqs_complete": 3,
+    "nice_to_have_reqs_complete": 0,
+    "reqs_total": 58,
+    "reqs_complete": 58
+  },
+  "tests": {
+    "unit_added": 114,
+    "unit_total": 1075,
+    "unit_result": "PASS",
+    "e2e_added": 3,
+    "e2e_result": "PASS",
+    "coverage": {
+      "lines": 96.96,
+      "branches": 90,
+      "functions": 100,
+      "statements": 96.96,
+      "threshold": 80,
+      "result": "PASS"
+    }
+  },
+  "quality_gate": "PASS",
+  "quality_review": {
+    "reviewers_run": 1,
+    "reviewer_infra_failures": 1,
+    "note": "The correctness reviewer subagent failed twice on a provider error (assistant message prefill unsupported); that review was performed directly instead, by executing probe scripts against the real modules rather than reading them.",
+    "findings_fixed": 5,
+    "findings": [
+      {
+        "id": "QR-1",
+        "severity": "HIGH",
+        "kind": "bug",
+        "detail": "repairState kept 3+ sweeps from a tampered save while clamping sweepIndex to 2, leaving sweeps.length above sweepIndex and granting an extra turn.",
+        "fix": "Slice to SWEEPS_TOTAL and derive sweepIndex from surviving sweeps."
+      },
+      {
+        "id": "QR-2",
+        "severity": "HIGH",
+        "kind": "bug",
+        "detail": "repairState honoured a terminal verdict claimed with zero sweeps, so a tampered save could assert a win with no answers.",
+        "fix": "Terminal verdict only honoured once both sweeps exist."
+      },
+      {
+        "id": "QR-3",
+        "severity": "MEDIUM",
+        "kind": "bug",
+        "detail": "setInterval drain leaked: the hub tears down by clearing root.innerHTML and GameInstance has no unmount hook, so the timer kept firing against a detached DOM.",
+        "fix": "Stop on root detachment and on round switch."
+      },
+      {
+        "id": "QR-4",
+        "severity": "HIGH",
+        "kind": "dry",
+        "detail": "Affix matching implemented twice (content-build.matchesAffix, engine.fitsAffix) with different signatures; a future rule change could apply to only one of build-time admission and run-time validation.",
+        "fix": "Hoisted to types.ts as single source of truth."
+      },
+      {
+        "id": "QR-5",
+        "severity": "LOW",
+        "kind": "cleanup",
+        "detail": "Dead MAX_PLAYERS export; plugin used a triple-nested indexed-access type instead of the named InvalidReason union.",
+        "fix": "Removed and replaced."
+      }
+    ]
+  },
+  "security_gate": "PASS",
+  "security_review": {
+    "owasp_checked": [
+      "A01",
+      "A02",
+      "A03",
+      "A04",
+      "A05",
+      "A06",
+      "A09",
+      "A10"
+    ],
+    "npm_audit": "0 vulnerabilities",
+    "new_dependencies": 0,
+    "findings": [],
+    "notes": "No network calls at runtime (REQ-055 verified). No innerHTML with data — all content via textContent. All submissions normalised to [a-z] before set lookup. No secrets, no console output, no dev endpoints. GloVe/SCOWL confirmed absent from dist/ (REQ-044)."
+  },
+  "code_symbol_traceability": {
+    "REQ-001,004": "src/games/lowball/engine.ts:selectDailyPuzzleId",
+    "REQ-002,003": "src/games/lowball/plugin.ts:Lowball.startDaily",
+    "REQ-005": "src/games/lowball/engine.ts:normalize",
+    "REQ-006..010": "src/games/lowball/engine.ts:submitAnswer",
+    "REQ-011,012": "src/games/lowball/engine.ts:submitAnswer,canSubmit",
+    "REQ-013,014": "src/games/lowball/engine.ts:totalFor",
+    "REQ-015..017": "src/games/lowball/engine.ts:computeVerdict",
+    "REQ-018..020": "src/games/lowball/engine.ts:advanceTick",
+    "REQ-021": "src/games/lowball/engine.ts:submitAnswer (SubmitOptions.reducedMotion)",
+    "REQ-022,023": "src/games/lowball/plugin.ts:savePracticeState,saveDailyState,recordDailyOutcome",
+    "REQ-024,025": "src/games/lowball/engine.ts:selectPracticePuzzleId",
+    "REQ-026": "src/games/lowball/plugin.ts:Lowball.startPractice",
+    "REQ-027..029": "src/kit/persistence.ts:saveAttempt,loadAttempt (reused)",
+    "REQ-028,058": "src/games/lowball/engine.ts:repairState",
+    "REQ-030": "src/games/lowball/plugin.ts:Lowball.recordDailyOutcome",
+    "REQ-031..035,042": "src/games/lowball/content-build.ts:gateFailureReason",
+    "REQ-036..040": "src/games/lowball/content-build.ts:panelScore",
+    "REQ-041": "src/games/lowball/content-build.ts:computePar",
+    "REQ-043..046": "tools/build-lowball.ts:main",
+    "REQ-044": "src/games/lowball/content-build.ts:buildAnswers",
+    "REQ-047": "src/games/lowball/share.ts:buildShareText,isSpoilerSafe",
+    "REQ-048": "src/games/lowball/share.ts:buildShareText (practice marker)",
+    "REQ-049..052": "src/games/lowball/plugin.ts:Lowball.render,buildReveal",
+    "REQ-053": "src/games/lowball/plugin.ts:PANEL_DISCLOSURE",
+    "REQ-054": "src/hub/registry.ts:GAMES",
+    "REQ-055": "src/games/lowball/plugin.ts (no network calls)",
+    "REQ-056": "src/games/lowball/engine.ts (imports only kit/selection + types)",
+    "REQ-057": "src/games/lowball/share.ts:canShare"
+  },
+  "outstanding_concerns": [
+    {
+      "id": "OC-1",
+      "detail": "axe-core is not a devDependency, so the automated WCAG 2.1 AA scan behind REQ-049..052 cannot run. Accessibility is implemented and asserted by unit and e2e tests (accessible name, live region text, badge text, numeric text channel) but not machine-audited.",
+      "severity": "MEDIUM",
+      "blocks_merge": false
+    },
+    {
+      "id": "OC-2",
+      "detail": "RISK-002 accepted residual: the Answer List is the sole runtime validator (ADR-002), so a corpus omission mis-rejects a valid word with no runtime escape hatch.",
+      "severity": "MEDIUM",
+      "blocks_merge": false
+    },
+    {
+      "id": "OC-3",
+      "detail": "e2e ran on chromium only; the mobile-safari and mobile-chrome projects were not exercised for this feature, so NFR-004 cross-runtime determinism is asserted by unit golden vectors rather than by three live runtimes.",
+      "severity": "LOW",
+      "blocks_merge": false
+    },
+    {
+      "id": "OC-4",
+      "detail": "GameInstance exposes no unmount hook, so timer teardown relies on root.isConnected. A kit-level lifecycle hook would be more robust and would benefit any future timed game.",
+      "severity": "LOW",
+      "blocks_merge": false
+    }
+  ],
+  "result": "PASS",
+  "post_gate_corrections": [
+    {
+      "id": "PGC-1",
+      "req": "REQ-053",
+      "severity": "MEDIUM",
+      "detail": "TEST-090 (share/view text omits \"we asked 100 people\") had a .feature scenario but no executable assertion. Only TEST-089 was tested, so the gate overstated coverage of the honesty constraint.",
+      "fix": "Added 4 unit tests in tests/lowball-share.test.ts plus 3 e2e assertions. Verified by sabotage: setting PANEL_DISCLOSURE to the forbidden phrase now fails 2 tests, where it previously passed.",
+      "status": "FIXED"
+    },
+    {
+      "id": "PGC-2",
+      "req": "REQ-053",
+      "severity": "MEDIUM",
+      "detail": "REQ-053 requires the disclosure wherever a panel score is presented. The reveal lists every answer score but was appended far below the single disclosure near the counter, so compliance depended on scroll position.",
+      "fix": "buildReveal now renders its own disclosure; asserted by e2e on .lb-reveal .lb-disclosure.",
+      "status": "FIXED"
+    }
+  ],
+  "verification_evidence": {
+    "dist_pack_answer_keys": [
+      "word",
+      "panelScore",
+      "isFindable"
+    ],
+    "forbidden_keys_in_pack": "none (rank, gloveRank, tier, scowlTier, vector, embedding all absent)",
+    "bundle_absent_symbols": [
+      "build-lowball",
+      "loadGloveVectors",
+      "glove.6B",
+      "wordkit/vectors",
+      "loadCorpus",
+      "wordTier",
+      "gateFailureReason"
+    ],
+    "formula_absent_from_bundle": "no log10, Math.pow, LOG_CEIL, FINDABLE_MAX_TIER, MIN_TRAP_SCORE or computePar in dist/assets; panelScore appears only as a data field read and the repairSweep clamp",
+    "adr_005_boundary": "nothing under src/ imports tools/ or wordkit/ (matches are comments only); content-build.ts uses no fs API so it is safe on both sides",
+    "largest_dist_file": "ladderless.json 4.7MiB — no file approaches the 163MiB GloVe size"
+  }
+}

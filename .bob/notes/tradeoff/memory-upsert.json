@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:tradeoff",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Tradeoff Puzzle - **Definition:** A single daily instance of the Tradeoff word-swap challenge defined by a start word, swap budget, par score, dictionary graph, and determinis",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily Tradeoff Puzzle (TERM-001) offline in the hub. | | ROLE-002 | Hub Shell | System |",
+    "Requirements: ### REQ-001: Deterministic daily puzzle identification - **EARS Pattern:** Event-Driven - **EARS Statement:** When the hub provides FIELD-028 `dailySeed` and FIELD-002 `puzzleDate`, the Plugin shall",
+    "Architecture: ## Components & Responsibilities  ### Hub Shell (CIC Games Hub Runtime) - **Responsibilities**   - Owns routing and entry points (e.g., `/#/games/tradeoff`, “Daily” deep links). *(JOURNEY-001, ENTRY-",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

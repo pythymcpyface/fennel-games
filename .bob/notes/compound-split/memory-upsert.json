@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:compound-split",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Compound Split - **Definition:** The daily word puzzle game mode in the CIC Games hub where a player pairs 8 shuffled word-halves into 4 target compound words. - **Synonyms:**",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Goals (summary) | Auth | |---|---|---|---|---| | ROLE-001 | Player | Primary | Play daily puzzle, use hint, share result, view stats | Hub session (local), no acco",
+    "Requirements: ### REQ-001: Derive deterministic puzzleId - **EARS Pattern:** Ubiquitous - **EARS Statement:** The Pure Core (TERM-005) shall derive FIELD-004 puzzleId deterministically from FIELD-001 pluginId, FIE",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub (Host App) - **Responsibilities**   - Provides plugin runtime and lifecycle for `GamePlugin` (mount/unmount, route navigation).   - Provides **Hub",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

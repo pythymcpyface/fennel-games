@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:vowel-ghost",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Vowel Ghost - **Definition:** The daily word puzzle game plugin in the CIC Games hub where the player restores vowels in 5 themed words. - **Synonyms:** VowelGhost, daily vowe",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Solves the TERM-004 Daily Puzzle in the plugin UI. | | ROLE-002 | Hub Runtime | System | Provides T",
+    "Requirements: ### REQ-001: Load daily puzzle by hub date and seed - **EARS Pattern:** Event-Driven - **EARS Statement:** When the player opens ENTRY-001, the Vowel Ghost plugin shall derive FIELD-001 puzzle_id usi",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub (Host App / Runtime) - **Responsibilities**   - Hosts the GamePlugin lifecycle and routing (`/hub/vowel-ghost/today`) (REQ-001, JOURNEY-001).   - P",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

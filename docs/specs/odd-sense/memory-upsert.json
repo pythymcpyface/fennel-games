@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:odd-sense",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Puzzle - **Definition:** A daily playable instance containing exactly five (5) words, one correct **Odd Word** and four **Themed Words**, plus configuration such as max attemp",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily **Puzzle** (TERM-001), uses **Hint** (TERM-017), views stats, shares results. | | R",
+    "Requirements: ### REQ-001: Select platform adapter at bootstrap - **EARS Pattern:** Event-Driven - **EARS Statement:** When the app launches, the composition root shall select the Platform Adapter (TERM-025) corre",
+    "Architecture: ## Components & Responsibilities  ### Composition Root (Bootstrapper) - **Responsibilities**   - Detect `platformKind` (FIELD-035) and instantiate the correct Platform Adapter (TERM-025). *(REQ-001)*",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

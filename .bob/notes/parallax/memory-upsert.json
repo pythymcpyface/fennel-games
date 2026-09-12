@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:parallax",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Parallax Game - **Definition:** The daily two-anchor semantic midpoint word game implemented as a GamePlugin within the CIC Games hub. - **Synonyms:** Parallax, Parallax daily",
+    "User Journeys: ## Roles  | Role ID | Role Name | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the Daily Puzzle, makes guesses, shares results. | | ROLE-002 | Hub Host | System | Prov",
+    "Requirements: ### REQ-001: Plugin mount initializes Parallax UI - **EARS Pattern:** Event-Driven - **EARS Statement:** When ENTRY-002 occurs, the Parallax Game (TERM-001) shall render its UI into FIELD-034. - **In",
+    "Architecture: ## Components & Responsibilities  ### Parallax GamePlugin (UI Shell + Lifecycle) - **Responsibilities**   - Implement `mount(root, services)` and render the Parallax UI into the provided root (REQ-00",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

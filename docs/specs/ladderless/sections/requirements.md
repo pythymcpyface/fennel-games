@@ -1,0 +1,561 @@
+# Requirements
+
+### REQ-001: Canonicalize dayId for daily selection
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the app loads a daily puzzle, the system shall derive FIELD-001 (dayId) as a canonical `YYYY-MM-DD` value using a single documented day-boundary rule.
+- **Inputs:** Platform clock
+- **Outputs:** FIELD-001
+- **Preconditions:** App launched (ENTRY-001) or day route opened (ENTRY-002)
+- **Postconditions:** FIELD-001 is available to TERM-017
+- **Invariants:** Same clock instant maps to exactly one dayId
+- **Trigger:** ENTRY-001, ENTRY-002
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-002 Day
+- **ErrorModes:** Invalid clock value
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-001 step 1; EDGE-001
+- **Dependencies:** None
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-001: Given a fixed timestamp and configured boundary rule, when derived, then FIELD-001 equals expected `YYYY-MM-DD`.
+  - TEST-002: Given two platforms with the same timestamp, when derived, then FIELD-001 matches across platforms.
+- **Assumptions:** Boundary rule is specified (e.g., UTC)
+- **OpenQuestions:** What exact boundary rule is desired (UTC vs local)?
+
+### REQ-002: Compute deterministic puzzleId
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-001, FIELD-002, and FIELD-003 are available, the system shall compute FIELD-004 (puzzleId) using TERM-018 (Seedable Hash) deterministically.
+- **Inputs:** FIELD-001, FIELD-002, FIELD-003
+- **Outputs:** FIELD-004
+- **Preconditions:** Content Pack metadata loaded
+- **Postconditions:** puzzleId selected for the session/day
+- **Invariants:** Same inputs yield same FIELD-004 on all platforms
+- **Trigger:** Daily selection invoked
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-017 Deterministic Daily Selection
+- **ErrorModes:** Missing input field
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-001 step 3
+- **Dependencies:** REQ-001
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-003: Given identical FIELD-001/2/3, when computed, then FIELD-004 is identical across pwa/ios/android.
+  - TEST-004: Given any change to FIELD-001, when computed, then FIELD-004 changes or maps to a different puzzle with a documented collision strategy.
+- **Assumptions:** Hash collision strategy is defined
+- **OpenQuestions:** Is collision resolution required, or is hash space sufficient?
+
+### REQ-003: Load content pack assets for selected puzzle
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-004 is computed, the system shall load FIELD-005 (startWord), FIELD-006 (targetWord), FIELD-015 (parGuesses), and TERM-008 (Per-Target Rank Table) for that puzzleId from the bundled TERM-015 (Content Pack).
+- **Inputs:** FIELD-004
+- **Outputs:** FIELD-005, FIELD-006, FIELD-015, rank table handle
+- **Preconditions:** Content Pack is installed
+- **Postconditions:** Puzzle data available for play
+- **Invariants:** Loaded assets correspond to FIELD-002 and FIELD-003
+- **Trigger:** Post-selection load
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-015 Content Pack
+- **ErrorModes:** Missing asset
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-001 step 4; ERROR-001
+- **Dependencies:** REQ-002
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-005: Given a valid puzzleId, when loading, then startWord/targetWord/parGuesses are non-null and valid.
+  - TEST-006: Given missing rank table asset, when loading, then ERROR-001 response is shown and play is blocked.
+- **Assumptions:** Content pack contains a mapping from puzzleId to assets
+- **OpenQuestions:** Are archives shipped as (dayId→puzzle) mapping or computed only?
+
+### REQ-004: Verify content asset integrity
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a Content Pack asset is loaded, the system shall validate it against FIELD-030 (assetIntegrityHash).
+- **Inputs:** Loaded asset bytes, FIELD-030
+- **Outputs:** Pass/fail signal
+- **Preconditions:** Asset accessible
+- **Postconditions:** Asset accepted or blocked
+- **Invariants:** Failed validation prevents gameplay using that asset
+- **Trigger:** Asset load
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-015 Content Pack
+- **ErrorModes:** Hash mismatch
+- **NFR-Tags:** security, reliability
+- **Source:** JOURNEY-001 step 4; BRANCH-002
+- **Dependencies:** REQ-003
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-007: Given corrupted asset bytes, when validated, then validation fails and UI shows blocked state.
+  - TEST-008: Given intact bytes, when validated, then validation passes.
+- **Assumptions:** Hash algorithm is defined and implemented consistently
+- **OpenQuestions:** Which hash algorithm (e.g., SHA-256)?
+
+### REQ-005: Initialize game state when none exists
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When no persisted TERM-021 (Game State) exists for FIELD-004 and FIELD-001, the system shall initialize FIELD-016 to `not_started`, FIELD-017 to an empty list, and FIELD-012 to `vocabSize`.
+- **Inputs:** FIELD-004, FIELD-001
+- **Outputs:** Initialized game state fields
+- **Preconditions:** Puzzle assets loaded
+- **Postconditions:** State ready for first guess
+- **Invariants:** Initialization does not reveal FIELD-006
+- **Trigger:** State load
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-021 Game State
+- **ErrorModes:** Storage read fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-001 BRANCH-001
+- **Dependencies:** REQ-003
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-009: Given no saved record, when opening puzzle, then UI shows startWord and 0 guesses.
+  - TEST-010: Given storage read error, when opening puzzle, then system starts in-memory state and signals non-persistence.
+- **Assumptions:** vocabSize is derivable from TERM-013 Dictionary
+- **OpenQuestions:** Where is vocabSize stored (metadata vs derived)?
+
+### REQ-006: Validate guessWord is in dictionary
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the player submits FIELD-007 (guessWord), the system shall reject the guess if FIELD-007 is not a TERM-006 (Vocabulary Word) in the TERM-013 (Dictionary) for FIELD-003.
+- **Inputs:** FIELD-007, FIELD-003
+- **Outputs:** Validation result
+- **Preconditions:** Puzzle loaded
+- **Postconditions:** Guess accepted or rejected without changing FIELD-017 on rejection
+- **Invariants:** Dictionary validation is deterministic and offline
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-013 Dictionary
+- **ErrorModes:** Dictionary asset missing
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-002 step 2; BRANCH-003
+- **Dependencies:** REQ-003
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-011: Given a non-dictionary word, when submitted, then UI shows “Not in dictionary” and guessHistory length unchanged.
+  - TEST-012: Given a dictionary word, when submitted, then validation passes.
+- **Assumptions:** Tokenization rules are defined for FIELD-007
+- **OpenQuestions:** Are inflections/diacritics allowed?
+
+### REQ-007: Prevent duplicate guesses
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the player submits FIELD-007, the system shall reject the guess if FIELD-007 already exists in FIELD-017.
+- **Inputs:** FIELD-007, FIELD-017
+- **Outputs:** Duplicate rejection signal
+- **Preconditions:** Any puzzleStatus except `won` (or as configured)
+- **Postconditions:** No append occurs on duplicate
+- **Invariants:** Comparison uses the normalized form of FIELD-007
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-021 Game State
+- **ErrorModes:** None
+- **NFR-Tags:** usability
+- **Source:** JOURNEY-002 BRANCH-004
+- **Dependencies:** REQ-006
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-013: Given a previously guessed word, when resubmitted, then UI shows “Already guessed” and guessHistory unchanged.
+- **Assumptions:** Normalization is applied before duplicate check
+- **OpenQuestions:** Should duplicates be allowed but not counted?
+
+### REQ-008: Lookup rank and tier from per-target rank table
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a validated FIELD-007 is submitted, the system shall obtain FIELD-010 (semanticRank) and FIELD-011 (rankTier) from TERM-008 for FIELD-006.
+- **Inputs:** FIELD-007, FIELD-006, rank table
+- **Outputs:** FIELD-010, FIELD-011
+- **Preconditions:** Rank table loaded
+- **Postconditions:** Guess can be evaluated for verdict
+- **Invariants:** No floating-point runtime similarity computation occurs
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-008 Per-Target Rank Table
+- **ErrorModes:** Rank lookup missing
+- **NFR-Tags:** compatibility, performance
+- **Source:** JOURNEY-002 step 3; ERROR-002
+- **Dependencies:** REQ-006
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-014: Given a guessWord present in the rank table, when looked up, then semanticRank and rankTier are returned deterministically.
+  - TEST-015: Given a dictionary word absent in the rank table, when looked up, then ERROR-002 response is shown and guess is not accepted.
+- **Assumptions:** Rank tables cover all dictionary words
+- **OpenQuestions:** Is partial coverage allowed for memory savings?
+
+### REQ-009: Compute warmer/colder verdict against bestRank
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-010 is obtained, the system shall set FIELD-013 (verdict) by comparing FIELD-010 to the prior FIELD-012.
+- **Inputs:** FIELD-010, prior FIELD-012
+- **Outputs:** FIELD-013
+- **Preconditions:** bestRank initialized
+- **Postconditions:** Verdict displayed
+- **Invariants:** Verdict uses best-so-far comparison, not previous guess
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-010 Warmer/Colder Verdict
+- **ErrorModes:** None
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-002 step 4; TERM-010
+- **Dependencies:** REQ-008
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-016: Given semanticRank lower than bestRank, when computed, then verdict is `warmer` (or `best` per enum) and bestRank updates.
+  - TEST-017: Given semanticRank higher than bestRank, when computed, then verdict is `colder` and bestRank unchanged.
+- **Assumptions:** Handling of equality is defined (`equal` vs `colder`)
+- **OpenQuestions:** What is desired verdict for rank equality?
+
+### REQ-010: Append accepted guess to guessHistory
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a guess is accepted, the system shall append a record to FIELD-017 containing FIELD-008, FIELD-007, FIELD-010, FIELD-011, FIELD-013, FIELD-014, and FIELD-009.
+- **Inputs:** Evaluated guess fields + adapter timestamp
+- **Outputs:** Updated FIELD-017
+- **Preconditions:** Guess validated and ranked
+- **Postconditions:** Guess is persisted (subject to storage success)
+- **Invariants:** FIELD-008 increments by 1 from previous accepted guess
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-021 Game State
+- **ErrorModes:** Storage write fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-002 step 5; ERROR-003; EDGE-004
+- **Dependencies:** REQ-008, REQ-009
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-018: Given two accepted guesses, when appended, then guessIndex values are 1 then 2.
+  - TEST-019: Given a storage failure, when attempting to append, then ERROR-003 response is shown and in-memory history contains the new record.
+- **Assumptions:** Timestamp source is available offline
+- **OpenQuestions:** Do we need idempotency tokens for retries?
+
+### REQ-011: Detect win by exact target match
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a guess is accepted, the system shall set FIELD-014 (isWin) to true if FIELD-007 equals FIELD-006.
+- **Inputs:** FIELD-007, FIELD-006
+- **Outputs:** FIELD-014
+- **Preconditions:** Puzzle loaded
+- **Postconditions:** Win state may be triggered
+- **Invariants:** Exact string match uses the normalized form
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-004 TARGET Word
+- **ErrorModes:** None
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-002 step 7
+- **Dependencies:** REQ-006
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-020: Given guessWord equals targetWord, when submitted, then isWin is true.
+  - TEST-021: Given guessWord differs, when submitted, then isWin is false.
+- **Assumptions:** Target is a single dictionary token
+- **OpenQuestions:** None
+
+### REQ-012: Transition puzzleStatus to won on win
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-014 becomes true, the system shall set FIELD-016 (puzzleStatus) to `won`.
+- **Inputs:** FIELD-014
+- **Outputs:** FIELD-016
+- **Preconditions:** Puzzle in_progress or not_started
+- **Postconditions:** Puzzle locked as won (policy-defined)
+- **Invariants:** puzzleStatus does not transition from `won` to other values
+- **Trigger:** Win detected
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-021 Game State
+- **ErrorModes:** Storage write fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-002 step 7
+- **Dependencies:** REQ-011
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-022: Given a winning guess, when applied, then puzzleStatus equals `won`.
+- **Assumptions:** Post-win guessing policy is defined elsewhere
+- **OpenQuestions:** After win, are further guesses allowed for exploration?
+
+### REQ-013: Generate hint word that improves bestRank
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the player requests a hint, the system shall return FIELD-024 (hintWord) whose rank is strictly lower than the current FIELD-012.
+- **Inputs:** FIELD-012, rank table
+- **Outputs:** FIELD-024
+- **Preconditions:** Puzzle loaded
+- **Postconditions:** Hint word shown or null
+- **Invariants:** Hint selection is deterministic given state and content
+- **Trigger:** ENTRY-004
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-025 Hint
+- **ErrorModes:** No qualifying hint exists
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-003 steps 1-2; BRANCH-006
+- **Dependencies:** REQ-003, REQ-008
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-023: Given bestRank > 1, when hint requested, then hintWord is non-null and its semanticRank < bestRank.
+  - TEST-024: Given bestRank == 1, when hint requested, then hintWord is null and UI shows “No hint available”.
+- **Assumptions:** Rank table iteration/aux index is available for hinting
+- **OpenQuestions:** Should hint be the “next” by rank or computed path?
+
+### REQ-014: Exclude already-guessed words from hint
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When selecting FIELD-024, the system shall not return a hintWord that exists in FIELD-017.
+- **Inputs:** Candidate hintWord, FIELD-017
+- **Outputs:** Filtered hintWord
+- **Preconditions:** Hint requested
+- **Postconditions:** Hint avoids duplicates
+- **Invariants:** If all improving words are already guessed, no hint is returned
+- **Trigger:** ENTRY-004
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-025 Hint
+- **ErrorModes:** No qualifying hint exists
+- **NFR-Tags:** usability
+- **Source:** JOURNEY-003 EDGE-007
+- **Dependencies:** REQ-013
+- **Priority:** P2
+- **AcceptanceCriteria:**
+  - TEST-025: Given improving candidates that include already guessed words, when hint requested, then returned hintWord is not in guessHistory.
+- **Assumptions:** There exists at least one improving unguessed word for most puzzles
+- **OpenQuestions:** None
+
+### REQ-015: Generate spoiler-safe shareText
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When the player requests share, the system shall generate FIELD-025 (shareText) from FIELD-017 and FIELD-015 using TERM-024 format.
+- **Inputs:** FIELD-017, FIELD-015, FIELD-001, FIELD-016
+- **Outputs:** FIELD-025
+- **Preconditions:** Puzzle loaded
+- **Postconditions:** Share text available to adapter
+- **Invariants:** Share text is deterministic for same guessHistory
+- **Trigger:** ENTRY-005
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-024 Share Artifact
+- **ErrorModes:** None
+- **NFR-Tags:** compatibility
+- **Source:** JOURNEY-004 step 2
+- **Dependencies:** REQ-010
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-026: Given a won puzzle, when share requested, then shareText ends with a star marker.
+  - TEST-027: Given in-progress puzzle (if allowed), when share requested, then shareText contains no win marker.
+- **Assumptions:** In-progress sharing policy is defined
+- **OpenQuestions:** Allow share before win?
+
+### REQ-016: Enforce spoiler safety by excluding targetWord literal
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-025 is generated, the system shall reject the share action if FIELD-025 contains FIELD-006 as a substring.
+- **Inputs:** FIELD-025, FIELD-006
+- **Outputs:** Share-block signal
+- **Preconditions:** shareText generated
+- **Postconditions:** Share proceeds or is blocked with message
+- **Invariants:** No automatic share of targetWord
+- **Trigger:** ENTRY-005
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-004 TARGET Word
+- **ErrorModes:** Spoiler detected
+- **NFR-Tags:** privacy
+- **Source:** JOURNEY-004 step 3; EDGE-008
+- **Dependencies:** REQ-015
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-028: Given a shareText that includes the targetWord, when share attempted, then share is blocked and user is informed.
+- **Assumptions:** Target word is not otherwise derivable from blocks alone
+- **OpenQuestions:** Also exclude startWord literal?
+
+### REQ-017: Persist game state locally per puzzle/day
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-017 or FIELD-016 changes, the system shall write the updated TERM-021 (Game State) to TERM-020 (Local Persistence) under a key derived from FIELD-027, FIELD-004, and FIELD-001.
+- **Inputs:** Game State fields, FIELD-027, FIELD-004, FIELD-001
+- **Outputs:** Stored record
+- **Preconditions:** Storage adapter available
+- **Postconditions:** State restorable after restart
+- **Invariants:** No network is required
+- **Trigger:** State mutation
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-020 Local Persistence
+- **ErrorModes:** Storage write fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-002 ERROR-003; JOURNEY-001 step 5
+- **Dependencies:** REQ-010, REQ-012
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-029: Given accepted guesses, when app restarts, then guessHistory is restored for the same dayId/puzzleId.
+- **Assumptions:** Storage backend differs by platform but keying is stable
+- **OpenQuestions:** Use IndexedDB vs localStorage for PWA baseline?
+
+### REQ-018: Update stats on first transition to in_progress
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-016 transitions to `in_progress` for a dayId the first time, the system shall increment FIELD-020 (gamesPlayed) by 1.
+- **Inputs:** FIELD-016 transition, FIELD-001
+- **Outputs:** FIELD-020 updated
+- **Preconditions:** Stats store exists or is initialized
+- **Postconditions:** gamesPlayed reflects started puzzles
+- **Invariants:** One increment per dayId
+- **Trigger:** First accepted guess causes in_progress
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-022 Stats
+- **ErrorModes:** Storage write fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-005
+- **Dependencies:** REQ-010
+- **Priority:** P2
+- **AcceptanceCriteria:**
+  - TEST-030: Given first accepted guess of a day, when recorded, then gamesPlayed increments by 1 and does not increment again for that day.
+- **Assumptions:** puzzleStatus becomes in_progress on first accepted guess (policy)
+- **OpenQuestions:** Is `in_progress` set explicitly or inferred?
+
+### REQ-019: Update stats and streak on win
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When FIELD-016 becomes `won` for a dayId the first time, the system shall increment FIELD-021 (gamesWon) by 1.
+- **Inputs:** puzzleStatus transition, FIELD-001
+- **Outputs:** FIELD-021 updated
+- **Preconditions:** Stats store available
+- **Postconditions:** wins counted
+- **Invariants:** One increment per dayId
+- **Trigger:** Win transition
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-022 Stats
+- **ErrorModes:** Storage write fails
+- **NFR-Tags:** reliability
+- **Source:** JOURNEY-002 step 7; JOURNEY-005
+- **Dependencies:** REQ-012
+- **Priority:** P1
+- **AcceptanceCriteria:**
+  - TEST-031: Given a win on a day, when recorded, then gamesWon increments once even if app restarts.
+- **Assumptions:** “First time” is tracked by stored per-day completion marker
+- **OpenQuestions:** Where is per-day completion marker stored?
+
+### REQ-020: Provide keyboard operability for core gameplay
+- **EARS Pattern:** Ubiquitous
+- **EARS Statement:** The system shall allow completing JOURNEY-002 using keyboard input only, including submitting FIELD-007 and invoking ENTRY-004 and ENTRY-005.
+- **Inputs:** Keyboard events
+- **Outputs:** Same outcomes as pointer interaction
+- **Preconditions:** UI loaded
+- **Postconditions:** Actions executed
+- **Invariants:** Focus is visible and order is logical
+- **Trigger:** Any time UI is active
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-031 Accessibility Support
+- **ErrorModes:** None
+- **NFR-Tags:** accessibility
+- **Source:** JOURNEY-002 EDGE-005
+- **Dependencies:** None
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-032: Given focus on guess input, when Enter is pressed, then ENTRY-003 occurs.
+  - TEST-033: Given focus on Hint button, when Space/Enter is pressed, then ENTRY-004 occurs.
+  - TEST-034: Given focus on Share button, when Space/Enter is pressed, then ENTRY-005 occurs.
+- **Assumptions:** Standard HTML button/input semantics are used
+- **OpenQuestions:** None
+
+### NFR-001: Offline-only gameplay (no network dependency)
+- **EARS Pattern:** Ubiquitous
+- **EARS Statement:** The system shall not require network access to execute JOURNEY-001 through JOURNEY-006 for any FIELD-002 and FIELD-003 bundled in the app.
+- **Inputs:** None
+- **Outputs:** Full gameplay available offline
+- **Preconditions:** App installed
+- **Postconditions:** Gameplay completes without network
+- **Invariants:** No runtime API calls for ranking or selection
+- **Trigger:** Any gameplay action
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-019 Offline-First
+- **ErrorModes:** None
+- **NFR-Tags:** reliability, compatibility
+- **Source:** User request; JOURNEY-001..006
+- **Dependencies:** REQ-003, REQ-008, REQ-017
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-035: Given device in airplane mode, when playing to completion, then selection, validation, ranking, win detection, and shareText generation all function.
+- **Assumptions:** OS permits local asset access offline
+- **OpenQuestions:** None
+
+### NFR-002: Cross-platform deterministic verdicts
+- **EARS Pattern:** Ubiquitous
+- **EARS Statement:** The system shall produce identical FIELD-013 (verdict) and FIELD-011 (rankTier) outputs for the same FIELD-006 and FIELD-007 across TERM-029 (PWA) and TERM-030 (Capacitor App).
+- **Inputs:** Same content pack + same guess sequence
+- **Outputs:** Matching verdict/tier sequences
+- **Preconditions:** Same FIELD-002 and FIELD-003 installed
+- **Postconditions:** Share artifacts are comparable across platforms
+- **Invariants:** No floating-point math is used in evaluation
+- **Trigger:** ENTRY-003
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-026 Deterministic Functional Core
+- **ErrorModes:** None
+- **NFR-Tags:** compatibility
+- **Source:** User request; JOURNEY-002
+- **Dependencies:** REQ-008, REQ-009
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-036: Given a fixed guess list and same pack, when replayed on pwa/ios/android, then the emitted verdict/tier list matches exactly.
+- **Assumptions:** Integer rank tables are identical byte-for-byte
+- **OpenQuestions:** None
+
+### NFR-003: Screen reader announcements for guess feedback
+- **EARS Pattern:** Event-Driven
+- **EARS Statement:** When a guess is accepted, the system shall announce FIELD-013 and FIELD-011 via an aria-live region when FIELD-028 is true.
+- **Inputs:** FIELD-013, FIELD-011, FIELD-028
+- **Outputs:** Screen reader announcement
+- **Preconditions:** Accessibility enabled
+- **Postconditions:** Feedback is perceivable non-visually
+- **Invariants:** Announcement contains no FIELD-006
+- **Trigger:** ENTRY-003 accepted guess
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-031 Accessibility Support
+- **ErrorModes:** None
+- **NFR-Tags:** accessibility, privacy
+- **Source:** JOURNEY-002 step 8; EDGE-006
+- **Dependencies:** REQ-009
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-037: Given a warmer verdict, when accepted, then aria-live text includes the word “Warmer” (or localized equivalent) and tier label.
+- **Assumptions:** Tier has a human-readable label mapping
+- **OpenQuestions:** Localization requirements?
+
+### NFR-004: Reduced motion compliance
+- **EARS Pattern:** State-Driven
+- **EARS Statement:** While FIELD-029 is true, the system shall disable non-essential animations for verdict/tier feedback.
+- **Inputs:** FIELD-029
+- **Outputs:** Motion-reduced UI behavior
+- **Preconditions:** UI rendered
+- **Postconditions:** Animations reduced
+- **Invariants:** Gameplay feedback remains available via text/aria
+- **Trigger:** Preference detected
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-031 Accessibility Support
+- **ErrorModes:** None
+- **NFR-Tags:** accessibility
+- **Source:** FIELD-029; TERM-031
+- **Dependencies:** None
+- **Priority:** P2
+- **AcceptanceCriteria:**
+  - TEST-038: Given prefers-reduced-motion enabled, when verdict changes, then no animation longer than 100ms occurs for that component.
+- **Assumptions:** System preference can be read on each platform
+- **OpenQuestions:** Should user override be allowed?
+
+### NFR-005: Local-only privacy (no account identifiers)
+- **EARS Pattern:** Unwanted
+- **EARS Statement:** The system shall not collect or transmit any player identifiers or gameplay events to a backend service.
+- **Inputs:** None
+- **Outputs:** None
+- **Preconditions:** App running
+- **Postconditions:** No outbound telemetry
+- **Invariants:** Share is user-initiated and content-limited to FIELD-025
+- **Trigger:** Any time
+- **Actor:** ROLE-002 System
+- **EntityScope:** TERM-019 Offline-First
+- **ErrorModes:** None
+- **NFR-Tags:** privacy, security
+- **Source:** User request (no accounts, no backend)
+- **Dependencies:** NFR-001
+- **Priority:** P0
+- **AcceptanceCriteria:**
+  - TEST-039: Given network inspection during gameplay, when playing and viewing stats, then no outbound requests are made by the app runtime (excluding OS-level connectivity checks outside the app).
+- **Assumptions:** Third-party SDKs are not included
+- **OpenQuestions:** Are crash reports allowed if fully offline/opt-in?
+
+### NFR-006: Observability via local diagnostics only
+- **EARS Pattern:** Optional
+- **EARS Statement:** Where a diagnostics screen is enabled, the system shall display FIELD-002, FIELD-003, FIELD-004, and FIELD-001 for troubleshooting without revealing FIELD-006.
+- **Inputs:** Metadata fields
+- **Outputs:** Diagnostics UI
+- **Preconditions:** Diagnostics feature enabled in build
+- **Postconditions:** Player can copy metadata
+- **Invariants:** No target word displayed
+- **Trigger:** Opening diagnostics route/action
+- **Actor:** ROLE-001 Player
+- **EntityScope:** TERM-015 Content Pack
+- **ErrorModes:** None
+- **NFR-Tags:** observability, privacy
+- **Source:** User request (offline, deterministic)
+- **Dependencies:** REQ-002
+- **Priority:** P3
+- **AcceptanceCriteria:**
+  - TEST-040: Given diagnostics enabled, when opened, then displayed fields include dayId/puzzleId/versions and exclude targetWord.
+- **Assumptions:** Diagnostics is optional
+- **OpenQuestions:** Do you want a user-accessible “export save” feature?

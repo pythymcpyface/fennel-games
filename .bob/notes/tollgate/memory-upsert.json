@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:tollgate",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Tollgate - **Definition:** The daily weighted word-ladder game that requires transforming a START word into a TARGET word by changing exactly one letter per move, minimizing t",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily TERM-001 Puzzle, tries to minimize FIELD-017 vs FIELD-010 | | ROLE-002 | Hub Host |",
+    "Requirements: ### REQ-001: Compute active puzzle date by UTC - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall compute FIELD-001 using the current time at the TERM-003 boundary. - **Inputs:** S",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Shell (Mount Adapter) - **Responsibilities**   - Implement `mount(root, services)` and render the application into the provided root (REQ-027).   - Re",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

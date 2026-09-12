@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:carbon-and-gamefeel",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: CIC Games Hub - **Definition:** The host application (offline-first PWA + Capacitor app) that renders and manages 22 daily word-puzzle games as plugins, providing shared UI sh",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays games, sees results, uses stats, countdown, and share. | | ROLE-002 | Keyboard-only Player |",
+    "Requirements: ### REQ-001: Provide Carbon g100 token variables in shared stylesheet - **EARS Pattern:** Ubiquitous - **EARS Statement:** The CIC Games Hub (TERM-001) shall expose a Carbon Token Layer (TERM-005) fo",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub Shell (PWA + Capacitor Host) (TERM-001) - **Responsibilities**   - Bootstraps the runtime UI shell and loads the Shared Kit (TERM-003) assets (REQ-",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

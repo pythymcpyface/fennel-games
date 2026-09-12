@@ -1,0 +1,105 @@
+{
+  "skill": "bug-fix",
+  "bug_slug": "lowball-valid-answer-rejected",
+  "branch": "main",
+  "completed": "2026-09-11T05:23:43.309Z",
+  "reported": {
+    "category": "Words ending in \"ape\"",
+    "submitted": "grape",
+    "observed": "scored 100, \"Not in the answer list\"",
+    "expected": "its panel score"
+  },
+  "spec_workflow_gates": "PASS",
+  "root_causes": [
+    {
+      "id": "CAUSE-A",
+      "severity": "HIGH",
+      "detail": "Profanity blocklist matched as an unanchored substring, so /rape/ deleted grape, drape, scrape, crape, serape, undrape, broomrape from the corpus, and /cock/ deleted peacock and shuttlecock. The Scunthorpe problem. Direct cause of the report.",
+      "fix": "Whole-word matching plus enumerated inflections and compounds, in content-build.ts."
+    },
+    {
+      "id": "CAUSE-B",
+      "severity": "HIGH",
+      "detail": "Generator grouped words with length > affix.length + 1 while the runtime matchesAffix accepts length > affix.length, silently dropping every word exactly one letter longer than its affix (cape, tape, came, name, bough).",
+      "fix": "Grouping now calls the runtime matchesAffix predicate; no length arithmetic exists on the build side."
+    },
+    {
+      "id": "CAUSE-ROOT",
+      "severity": "HIGH",
+      "detail": "Deeper cause: two independent implementations of one acceptance rule with no test asserting equivalence. CAUSE-B was inevitable given that structure.",
+      "fix": "Single shared predicate plus a permanent build-time agreement proof."
+    }
+  ],
+  "blast_radius": {
+    "categories_affected": 75,
+    "categories_total": 120,
+    "valid_words_rejected": 184,
+    "worst_category": "ape (14 missing)"
+  },
+  "fix": {
+    "files_changed": [
+      "src/games/lowball/content-build.ts",
+      "tools/build-lowball.ts",
+      "public/lowball.json",
+      "tests/lowball-regression-valid-answer.test.ts"
+    ],
+    "runtime_engine_changed": false,
+    "new_dependencies": 0,
+    "pack_version": "1.0.0 -> 1.1.0",
+    "pack_size": "165.4 KiB -> 155.5 KiB",
+    "categories_passing_gate": "988 -> 1245"
+  },
+  "reproduction_test": {
+    "file": "tests/lowball-regression-valid-answer.test.ts",
+    "red_before_fix": true,
+    "tests": 28,
+    "transition": "26 failing -> 28 passing across the fix"
+  },
+  "verification": {
+    "reported_case": "grape now scores 22 with invalidReason null (was 100 / not_in_list)",
+    "unit_tests": "1109 passed (109 files)",
+    "e2e": "4 Lowball journeys passed on the regenerated pack",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "agreement_proof": "0 soundness, 0 completeness violations across 120 categories",
+    "content_safety": "2657 answers and 120 prompts scanned, 0 blocked words leaked"
+  },
+  "sabotage_verification": {
+    "cause_b": "Reintroducing the +1 fails the BUILD with 95 completeness violations naming each omitted word.",
+    "cause_a": "Reverting to substring matching fails 9 regression tests naming each collateral word.",
+    "conclusion": "Neither root cause can silently recur."
+  },
+  "open_questions_resolved": {
+    "OQ-001": "User chose whole-word plus inflections. Compound denylist added because whole-word alone would newly ADMIT rapeseed and bullshit.",
+    "OQ-002": "Collateral and off-by-one words committed as explicit assertions in the regression suite rather than a generated fixture."
+  },
+  "residual_risk": [
+    {
+      "id": "RR-1",
+      "severity": "MEDIUM",
+      "detail": "Daily category selection is seeded with the pack version, so bumping to 1.1.0 changes which category each day maps to. Historical days resolve differently than before. Unavoidable once answer content changes; approved by the user.",
+      "mitigation": "startDaily discards a save whose puzzleId no longer matches the selected category, so a mid-round player gets a fresh correct round rather than mismatched answers."
+    },
+    {
+      "id": "RR-2",
+      "severity": "MEDIUM",
+      "detail": "The same unanchored-substring blocklist flaw exists in other games build tools (build-semantic-gradient.ts and siblings). Deliberately out of scope: fixing them regenerates other games packs, beyond this defect.",
+      "mitigation": "Recorded as a follow-up. Lowball is uniquely exposed because its Answer List is the sole validator; other games ship a separate accept-list."
+    },
+    {
+      "id": "RR-3",
+      "severity": "LOW",
+      "detail": "The compound denylist is enumerated by hand, so a novel offensive compound not on the list would be admitted.",
+      "mitigation": "BLOCKED_COMPOUNDS is a named reviewable constant; spec RISK-001 asks for content-safety sign-off on its contents."
+    },
+    {
+      "id": "RR-4",
+      "severity": "LOW",
+      "detail": "Completeness proof is corpus-wide by category (111k words x 120), adding runtime to the content build.",
+      "mitigation": "Measured acceptable; build completes in normal time. Spec RISK-010 suggests a CI time budget if the corpus grows."
+    }
+  ],
+  "quality_gate": "PASS",
+  "security_gate": "PASS",
+  "result": "PASS"
+}

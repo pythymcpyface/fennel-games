@@ -1,0 +1,19 @@
+{
+  "phase": "start-project-3",
+  "skill": "start-project",
+  "method": "orchestrator.start-project.architecture-artifacts",
+  "feature_slug": "lowball",
+  "branch": "main",
+  "complexity_class": "small",
+  "invoked": false,
+  "result": "SKIPPED",
+  "reason": "complexity-small",
+  "decision_table_ref": "references/phases.md Phase 3 — Small => skip entirely",
+  "premise_check": {
+    "skill_premise": "At small, PROJECT-PLAN.md section 4 (Architecture Overview) produced by Phase 2 carries the architecture summary inline.",
+    "premise_holds": false,
+    "finding": "The orchestrator PROJECT-PLAN.md has sections Overview, Stakeholders, Milestones, Deliverables, Quality Gates. There is no section 4 Architecture Overview. It references components C-001..C-006 in passing (10 mentions) but carries no architecture summary.",
+    "mitigation": "Architecture coverage is instead supplied by the spec-workflow ARCHITECTURE.md persisted at .bob/docs/main/ARCHITECTURE.md (494 lines, 7 sections: Components & Responsibilities, Data Flow, Deployment Topology, Security Architecture, Integration Points, 8 Architecture Decision Records, Cross-Cutting Concerns). This is sufficient for a single pluggable game on a proven 50-game plugin contract.",
+    "residual": "INTERFACES.md, DATA-MODEL.md and STATE-MACHINES.md are not produced at this complexity class. STATE-MACHINES.md is the notable absence: the round has a genuine state machine (sweepIndex 0->1->2, verdict pending->win/loss, tickCounter 100->target). It is fully specified by REQ-011..REQ-021 and their 98 scenarios, so it is documented behaviourally even though no diagram artifact exists."
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:rhyme-chain",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Rhyme Chain - **Definition:** The daily word puzzle game where a player enters a sequence of words such that each word rhymes with the previous word and matches a per-slot def",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily TERM-007 in the TERM-006, entering TERM-020 and viewing TERM-027. | | ROLE-002 | Hu",
+    "Requirements: ### REQ-001: Select the daily puzzle deterministically - **EARS Pattern:** Event-Driven - **EARS Statement:** When the player opens ENTRY-001, the Rhyme Chain plugin shall select a TERM-012 using FIE",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub Host (Shell + Runtime) - **Responsibilities**   - Mounts the Rhyme Chain Game Plugin via the **GamePlugin Contract** (TERM-004).   - Injects **Hub",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

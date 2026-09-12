@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:isthmus",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Isthmus Game - **Definition:** The daily word-path puzzle experience where a player selects adjacent letter tiles to form a shore-to-shore valid word-path on a small grid. - *",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the Daily Puzzle, traces a TERM-005, views validation, shares results. | | ROLE-002 | Hub Hos",
+    "Requirements: ### REQ-001: GamePlugin mount initializes game - **EARS Pattern:** Event-Driven - **EARS Statement:** When the hub host calls TERM-022 `mount(root, services)`, the Isthmus Game shall render the TERM-",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Shell (Isthmus Plugin Entry) - **Satisfies:** REQ-001, REQ-019, REQ-020; NFR-003 - **Responsibilities**   - Expose `mount(root, services)` (TERM-022)",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

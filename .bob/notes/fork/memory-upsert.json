@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:fork",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Fork Puzzle - **Definition:** A daily word-ladder puzzle consisting of one **Start Word** and two **Target Words** of equal length, requiring a shared **Trunk Path** that late",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily **TERM-001 Fork Puzzle** in PWA/iOS/Android. | | ROLE-002 | Hub Shell | System | CI",
+    "Requirements: ### REQ-001: Compute UTC date for daily selection - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall compute **FIELD-002 utcDate** using UTC time. - **Inputs:** device clock - **Ou",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Adapter (Plugin Entry) - **Responsibilities**   - Implement `mount(root, services)` per **TERM-020 GamePlugin**.   - Validate `root` exists (**ERROR-0",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

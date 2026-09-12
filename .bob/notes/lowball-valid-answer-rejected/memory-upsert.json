@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:lowball-valid-answer-rejected",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Lowball **Definition:** A daily word-guessing game within the CIC Games hub in which players submit words belonging to a shown category, each scored against a panel value, wit",
+    "User Journeys: ## Roles  | Role | Description | |---|---| | Player (Primary) | End user playing Lowball on iOS/Android/desktop web, submitting words for the daily category. | | Content Builder (Secondary) | Develop",
+    "Requirements: ### REQ-001: Reject profanity-blocklist matching via unanchored substring - **ID:** REQ-001 - **Title:** Generator shall not exclude a corpus word from a category's answerList on the basis of an unan",
+    "Architecture: ## Components & Responsibilities  ### Build-Time Content Generator (`tools/build-lowball.ts`)  **Satisfies:** REQ-001, REQ-002, REQ-003, REQ-004, BRANCH-002, BRANCH-003, EDGE-005, EDGE-006, EDGE-007",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected Requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

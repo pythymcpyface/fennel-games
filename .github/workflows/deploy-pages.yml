@@ -1,0 +1,67 @@
+# REQ-039: GitHub Actions workflow — build the PWA and deploy to GitHub Pages.
+#
+# SETUP REQUIRED before this workflow runs:
+# 1. Push this repo to GitHub (see DEPLOYMENT.md step 1).
+# 2. In your GitHub repo Settings → Pages → Source: set to "GitHub Actions".
+# 3. On every push to main, this workflow builds dist/ and publishes it.
+#
+# The VITE_RELAY_URL environment variable must be set as a repository secret
+# (Settings → Secrets and variables → Actions → New repository secret):
+#   Name:  VITE_RELAY_URL
+#   Value: wss://lowball-relay.<your-account>.workers.dev
+# (See DEPLOYMENT.md step 3 for how to get this value.)
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # Relay WebSocket URL injected at build time (REQ-040).
+          # Set VITE_RELAY_URL as a GitHub Actions secret (see DEPLOYMENT.md).
+          VITE_RELAY_URL: ${{ secrets.VITE_RELAY_URL }}
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

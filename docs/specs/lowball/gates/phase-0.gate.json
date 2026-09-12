@@ -1,0 +1,5 @@
+{"phase":0,"skill":"spec-workflow","feature_slug":"lowball","mode":"feature","complexity_class":"small",
+"metrics":{"complexity_classified":true,"drift_check_run":true,"aas_config_present":false,"repo_conventions_captured":true},
+"thresholds":{"complexity_classified":true,"drift_check_run":true},
+"notes":"No .bob/aas.json in repo; bob-sdlc-skills default endpoint resolution used, consistent with 25 prior game spec packs under .bob/notes/.",
+"result":"PASS"}

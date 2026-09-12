@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:lowball",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Daily Round **Definition:** The single, canonical Lowball puzzle instance for a given UTC calendar day, whose category is deterministically selected and whose result feeds the",
+    "User Journeys: ## Roles  | Role | Description | |---|---| | Player | The single local user playing Daily and/or Practice rounds; no accounts, no PII. | | System (Engine) | The pure, deterministic Lowball engine exe",
+    "Requirements: ### REQ-001: Deterministic Daily category selection via FNV-1a hash - **ID:** REQ-001 - **Title:** Compute Daily Round categoryId deterministically - **EARS Pattern:** Event-Driven - **EARS Statement",
+    "Architecture: ## Components & Responsibilities  ### C-001: Lowball Engine (Pure Core)  **Satisfies:** REQ-001, REQ-002, REQ-003, REQ-004+ (validation/scoring), TERM-001 through TERM-020, FIELD-008/009/014–019/024",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected Requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

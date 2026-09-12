@@ -1,0 +1,20 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.DS_Store
+*.tsbuildinfo
+test-results/
+playwright-report/
+/ios/
+/android/
+.vite/
+wordkit/node_modules/
+wordkit/vectors/
+.bob/docs/
+.bob/docs/feature/
+# Workers relay — isolated package
+workers/lowball-relay/node_modules/
+workers/lowball-relay/dist/
+workers/lowball-relay/.wrangler/

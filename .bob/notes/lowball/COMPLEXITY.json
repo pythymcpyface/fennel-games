@@ -1,0 +1,16 @@
+{
+  "feature_slug": "lowball",
+  "complexity_class": "small",
+  "rationale": "One new pluggable game added to an existing 50-game hub with a fixed, proven plugin contract (GamePlugin/GameServices). Net-new surface: pure scoring engine, build-time content generator with a novel fairness gate, free-text answer UI, a 100-bar tension counter, and a practice mode that has no precedent in the repo. No new platform adapters, no backend, no schema migration. Larger than trivial because the panel-scoring model, the beat-par win condition and practice-mode stats isolation are all new semantics, not a reskin of an existing game.",
+  "sizing_floor": { "journeys": 6, "requirements": 25, "acceptance_criteria": 50, "scenarios": 50 },
+  "drift_check": {
+    "aas_config_present": false,
+    "note": "No .bob/aas.json in repo; relying on bob-sdlc-skills default endpoint resolution. Prior game spec packs in .bob/notes/<slug>/sdlc-plan.md confirm the same path was used previously."
+  },
+  "repo_conventions": {
+    "spec_pack_location": "docs/specs/<slug>/sections/*.md + sdlc-plan.md",
+    "notes_location": ".bob/notes/<slug>/",
+    "tests": "tests/<slug>-{engine,content,share}.test.ts",
+    "registry": "src/hub/registry.ts"
+  }
+}

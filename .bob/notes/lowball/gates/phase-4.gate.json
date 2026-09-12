@@ -1,0 +1,6 @@
+{"phase":4,"skill":"spec-workflow","feature_slug":"lowball","owner":"REMOTE",
+"tool":"mcp__bob-sdlc-skills__spec_workflow_gherkin_extract","method":"orchestrator.spec-workflow.gherkin-extract",
+"metrics":{"feature_files":58,"scenarios":98,"unique_test_ids":98,"unique_ac_tags":98,"req_files_one_to_one":true,"missing_test_tags":0,"scenarios_missing_when":0,"duplicate_scenario_bodies":0,"step_substitution_defects":0,"step_pattern_library_size":210,"extraction_runs":8},
+"thresholds":{"unique_test_ids":98,"missing_test_tags":0,"scenarios_missing_when":0,"duplicate_scenario_bodies":0,"step_substitution_defects":0},
+"notes":"Required 8 extraction runs. Root cause of every defect was identical: when the test plan lacked an exact-match step pattern for an AC's specific fact, the extractor silently substituted a neighbouring requirement's steps. Fixed by growing the step-definition library from 85 to 210 patterns. 23 semantic defects were found and closed, including one inverted-logic scenario (REQ-025 AC-2 asserted inequality where the AC requires equality). Verified independently by scripted checks, not only by the server.",
+"result":"PASS"}

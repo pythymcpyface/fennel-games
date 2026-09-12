@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:numeronym",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Numeronym - **Definition:** A texting-style clue string where one or more letter sounds are replaced by digits or single letters according to a substitution map (e.g., `GR8`,",
+    "User Journeys: ## Roles  | Role ID | Role Name | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the TERM-008 Daily Puzzle via TERM-024 View Layer | | ROLE-002 | Hub Services | System |",
+    "Requirements: ### REQ-001: Deterministic daily puzzle selection from hub seed - **EARS Pattern:** Event-Driven - **EARS Statement:** When the plugin is initialized via ENTRY-005, the TERM-023 Pure Core shall compu",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub (Host App) - **Responsibilities**   - Hosts the Numeronym plugin route `/games/numeronym/daily` (ENTRY-001) and lifecycle hook `GamePlugin.init()`",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

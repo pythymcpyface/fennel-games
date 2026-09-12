@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:overdraft",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Overdraft - **Definition:** A daily deterministic word-building game where a player forms exactly one word from a provided letter set, optionally using up to a limited number",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays TERM-001 Overdraft daily puzzle and submits one TERM-010 Word Submission | | ROLE-002 | Hub H",
+    "Requirements: ### REQ-001: Initialize GamePlugin mount contract - **EARS Pattern:** Event-Driven - **EARS Statement:** When ENTRY-002 `mount(root, services)` is invoked, the system shall initialize TERM-015 GamePl",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Shell (Overdraft Plugin Entry) - **Responsibilities**   - Implement `mount(root, services)` to bootstrap the game UI and logic. (REQ-001)   - Validate",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:clueback",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Clueback - **Definition:** A daily reverse-crossword game mode where the **grid is pre-filled with correct answers** and the player selects the **correct clue** for each answe",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays **TERM-001** daily puzzle, selects clues, views results, shares **TERM-014** | | ROLE-002 | H",
+    "Requirements: ### REQ-001: Initialize Clueback plugin - **EARS Pattern:** Event-Driven - **EARS Statement:** When the hub calls **TERM-017** `mount(root, services)`, the system shall initialize the game under **FI",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Shell (Clueback Plugin Entry) - **Satisfies:** REQ-001, NFR-001, NFR-007 - **Responsibilities**   - Implement `mount(root, services)` and bootstrap th",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "phase": "start-project-2",
+  "skill": "start-project",
+  "method": "orchestrator.start-project.planning-pack",
+  "feature_slug": "lowball",
+  "branch": "main",
+  "complexity_class": "small",
+  "documents": [
+    {
+      "path": "PROJECT-PLAN.md",
+      "bytes": 10757,
+      "exists": true
+    },
+    {
+      "path": "IMPLEMENTATION-ROADMAP.md",
+      "bytes": 21748,
+      "exists": true
+    },
+    {
+      "path": "RISKS-AND-MITIGATIONS.md",
+      "bytes": 12166,
+      "exists": true
+    },
+    {
+      "path": ".bob/AGENTS.md",
+      "bytes": 15477,
+      "exists": true
+    }
+  ],
+  "post_check": {
+    "performed": true,
+    "defects_found": 4,
+    "defects": [
+      {
+        "id": "PP-1",
+        "doc": "RISKS-AND-MITIGATIONS.md",
+        "issue": "Cross-reference table mis-mapped 5 of 13 rows against the hardened REQUIREMENTS.md (RISK-004 cited REQ-012/013; RISK-009 cited REQ-022; RISK-005 and RISK-008 each cited an unrelated tick-counter REQ; RISK-002 cited REQ-004 as pending though it exists).",
+        "remediation": "Corrected in place with an inline correction note.",
+        "status": "FIXED"
+      },
+      {
+        "id": "PP-2",
+        "doc": "IMPLEMENTATION-ROADMAP.md",
+        "issue": "Phase names correct but REQ ids numbered against an earlier smaller requirement set: only 33 of 58 REQs cited, 25 absent, several rows pointing at unrelated requirements.",
+        "remediation": "All 41 phase rows remapped by matching phase name to real REQ titles; coverage now 58/58.",
+        "status": "FIXED"
+      },
+      {
+        "id": "PP-3",
+        "doc": ".bob/AGENTS.md",
+        "issue": "Carbon View Agent scope cited REQ-011 (engine sweep-index) and REQ-022 (Hub Shell storage key) instead of the actual view requirements.",
+        "remediation": "Scope corrected to REQ-021, REQ-049..REQ-053.",
+        "status": "FIXED"
+      },
+      {
+        "id": "PP-4",
+        "doc": "all four",
+        "issue": "The REQ-053 honesty constraint (panel score is a simulated model, not a real survey) was omitted from the entire generated pack.",
+        "remediation": "Restated explicitly in RISKS-AND-MITIGATIONS.md and .bob/AGENTS.md.",
+        "status": "FIXED"
+      }
+    ]
+  },
+  "metrics": {
+    "documents_returned": 4,
+    "documents_persisted": 4,
+    "req_coverage_in_roadmap": "58/58",
+    "risk_rows": 13
+  },
+  "thresholds": {
+    "documents_persisted": 4
+  },
+  "result": "PASS_WITH_LOCAL_CORRECTIONS"
+}

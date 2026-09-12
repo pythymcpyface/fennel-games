@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:ladderless",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Puzzle - **Definition:** The deterministic daily semantic word challenge consisting of a **START word** (TERM-003), a hidden **TARGET word** (TERM-004), and the rules for eval",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily puzzle, enters guesses, requests hints, views stats, shares results. | | ROLE-002 |",
+    "Requirements: ### REQ-001: Canonicalize dayId for daily selection - **EARS Pattern:** Event-Driven - **EARS Statement:** When the app loads a daily puzzle, the system shall derive FIELD-001 (dayId) as a canonical",
+    "Architecture: ## Components & Responsibilities  ### UI Shell (Web UI: Routes + Views) - **Responsibilities**   - Render routes: `/` (today), `/day/:dayId`, `/stats`, `/settings` (and optional diagnostics).   - Cap",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

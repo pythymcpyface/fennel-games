@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:overlap",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Overlap App - **Definition:** The offline-first, fully client-side daily bridge-word puzzle application delivered as an installable PWA and as iOS/Android apps via Capacitor f",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the TERM-002, submits TERM-006, uses TERM-010, views TERM-017/TERM-018, shares TERM-019 | | R",
+    "Requirements: ### REQ-001: Compute canonical day identifier - **EARS Pattern:** Ubiquitous - **EARS Statement:** The system shall compute FIELD-001 (dayId) in format `YYYY-MM-DD` using the TERM-022 clock provider.",
+    "Architecture: ## Components & Responsibilities  ### Functional Core (`@overlap/core`) - **Responsibilities**   - Compute `dayId` *input validation only* (format helpers); actual time source is external. *(REQ-001",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

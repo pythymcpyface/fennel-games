@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:mirrorle",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Mirrorle - **Definition:** A daily deduction word game in the CIC Games hub where the player must deduce **two** hidden 5-letter secret words using aggregated feedback from ea",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | End user who plays the daily Mirrorle puzzle. | | ROLE-002 | Hub Host | System | CIC Games hub that",
+    "Requirements: ### REQ-001: Mount Mirrorle as a GamePlugin - **EARS Pattern:** Ubiquitous - **EARS Statement:** The Mirrorle client shall implement TERM-020 GamePlugin with a `mount(root, services)` entry to render",
+    "Architecture: ## Components & Responsibilities  ### GamePlugin Entry (`MirrorlePlugin`) - **Responsibilities**   - Implement `mount(root, services)` and render the Mirrorle UI (REQ-001).   - Perform capability det",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@cic/wordkit",
+  "version": "0.1.0",
+  "description": "Shared British-English word-data package for cic word games: en-GB corpus, frequency banding, similarity rank tables, graph primitives.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "fetch-corpus": "tsx scripts/build-corpus.ts",
+    "fetch-glove": "tsx scripts/fetch-glove.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1",
+    "wordlist-english": "^1.2.1"
+  }
+}

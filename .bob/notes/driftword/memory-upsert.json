@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:driftword",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Driftword - **Definition:** The daily 5-letter deduction game where the target word changes deterministically by exactly one letter after each guess, following a pre-published",
+    "User Journeys: ## Roles  | Role ID | Role | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily Driftword puzzle and shares results. | | ROLE-002 | Hub Host | System | Loads the G",
+    "Requirements: ### REQ-001: Initialize plugin and namespace storage - **EARS Pattern:** Ubiquitous - **EARS Statement:** The Driftword client shall prefix all locally persisted keys with `FIELD-021 stats_namespace`",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub (Host Container) - **Responsibilities**   - Loads the Driftword `GamePlugin` and calls `mount(root, services)` (ENTRY-002).   - Provides shared `se",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---|---|---|---|---|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:edit-ladder-trails",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Edit-Ladder Trails - **Definition:** The daily word-puzzle game plugin for the cic-games hub, featuring a 6x6 grid that is a perfect cover of solution words including an edit-",
+    "User Journeys: ## Roles  | Role ID | Role Name | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays the daily TERM-001 puzzle offline, traces TERM-009 paths, earns TERM-027 hints, complete",
+    "Requirements: ### REQ-001: Register game plugin in hub - **EARS Pattern:** Ubiquitous - **EARS Statement:** The TERM-002 cic-games Hub shall register TERM-001 Edit-Ladder Trails as a TERM-003 Game Plugin. - **Inpu",
+    "Architecture: ## Components & Responsibilities  ### Hub Shell (cic-games Hub) - **Responsibilities**   - Registers and lists the Edit-Ladder Trails plugin in the hub game list. *(satisfies REQ-001)*   - Hosts the",
+    "Review: ## Risks (table sorted by severity descending)  | Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

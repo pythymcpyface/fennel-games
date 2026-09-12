@@ -1,0 +1,28 @@
+# Cloudflare Workers configuration for the Lowball multiplayer relay.
+# REQ-040: this file must be present and accepted by `wrangler dev`.
+#
+# DEPLOYMENT: see DEPLOYMENT.md at the repo root for step-by-step instructions.
+# Run `wrangler dev` from this directory for local development (no Cloudflare account needed).
+# Run `wrangler deploy` after `wrangler login` to publish to production.
+
+name = "lowball-relay"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+# compatibility_date >= 2023-03-01 enables WebSocket Hibernation API (REQ-055)
+# and DO alarm() without separate storage unlock.
+
+# Node.js compatibility flag enables crypto.getRandomValues, etc.
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "LOWBALL_RELAY"
+class_name = "LowballRelayDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["LowballRelayDO"]
+
+# Optional: override relay base URL for invite link construction (used in DEPLOYMENT.md)
+# Uncomment after deploying and set to your workers.dev subdomain.
+# [vars]
+# RELAY_BASE_URL = "https://lowball-relay.<your-account>.workers.dev"

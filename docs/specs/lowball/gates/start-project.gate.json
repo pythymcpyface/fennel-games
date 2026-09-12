@@ -1,0 +1,182 @@
+{
+  "skill": "start-project",
+  "feature_slug": "lowball",
+  "branch": "main",
+  "complexity_class": "small",
+  "completed": "2026-09-10T17:46:38.894Z",
+  "remote_calls": [
+    "orchestrator.spec-workflow.sdlc-planning",
+    "orchestrator.spec-workflow.gherkin-extract",
+    "orchestrator.spec-workflow.traceability-matrix",
+    "orchestrator.start-project.planning-pack"
+  ],
+  "remote_calls_omitted": [
+    {
+      "method": "orchestrator.start-project.architecture-artifacts",
+      "reason": "complexity class small — Phase 3 skipped per decision table"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "COMPLEXITY.json",
+      "required": true,
+      "exists": true,
+      "bytes": 1229,
+      "source": "local"
+    },
+    {
+      "name": "USER-JOURNEYS.md",
+      "required": true,
+      "exists": true,
+      "bytes": 21644,
+      "source": "remote"
+    },
+    {
+      "name": "GLOSSARY.md",
+      "required": true,
+      "exists": true,
+      "bytes": 10030,
+      "source": "remote"
+    },
+    {
+      "name": "DATA-DICTIONARY.md",
+      "required": true,
+      "exists": true,
+      "bytes": 4284,
+      "source": "remote"
+    },
+    {
+      "name": "REQUIREMENTS.md",
+      "required": true,
+      "exists": true,
+      "bytes": 70459,
+      "source": "remote+local-hardened"
+    },
+    {
+      "name": "ATOMICITY-REPORT.md",
+      "required": true,
+      "exists": true,
+      "bytes": 3282,
+      "source": "local"
+    },
+    {
+      "name": "REFINEMENT-LOG.md",
+      "required": true,
+      "exists": true,
+      "bytes": 4268,
+      "source": "local"
+    },
+    {
+      "name": "ARCHITECTURE.md",
+      "required": true,
+      "exists": true,
+      "bytes": 36076,
+      "source": "remote"
+    },
+    {
+      "name": "TDD-STRATEGY.md",
+      "required": true,
+      "exists": true,
+      "bytes": 56325,
+      "source": "remote+local-hardened"
+    },
+    {
+      "name": "TRACEABILITY-MATRIX.md",
+      "required": true,
+      "exists": true,
+      "bytes": 28919,
+      "source": "remote"
+    },
+    {
+      "name": "VERIFICATION-REPORT.md",
+      "required": true,
+      "exists": true,
+      "bytes": 5891,
+      "source": "remote"
+    },
+    {
+      "name": "PROJECT-PLAN.md",
+      "required": true,
+      "exists": true,
+      "bytes": 10757,
+      "source": "remote"
+    },
+    {
+      "name": "IMPLEMENTATION-ROADMAP.md",
+      "required": true,
+      "exists": true,
+      "bytes": 21748,
+      "source": "remote+local-corrected"
+    },
+    {
+      "name": "RISKS-AND-MITIGATIONS.md",
+      "required": true,
+      "exists": true,
+      "bytes": 12166,
+      "source": "remote+local-corrected"
+    },
+    {
+      "name": ".bob/AGENTS.md",
+      "required": true,
+      "exists": true,
+      "bytes": 15477,
+      "source": "remote+local-corrected"
+    },
+    {
+      "name": "NFR-WAIVERS.md",
+      "required": true,
+      "exists": true,
+      "bytes": 2836,
+      "source": "local"
+    }
+  ],
+  "validation": {
+    "manifest_check": "PASS",
+    "cross_reference_check": "PASS",
+    "cross_reference_detail": {
+      "nonexistent_req_citations": 0,
+      "risk_rows": 13,
+      "untraced_risks": 0,
+      "roadmap_req_coverage": "58/58"
+    },
+    "atomicity_carry_over": "PASS_PENDING_WAIVER",
+    "remote_call_provenance": "PASS",
+    "helper_scripts": {
+      "count": 3,
+      "syntax_checked": true,
+      "executed": false
+    }
+  },
+  "metrics": {
+    "requirements": 58,
+    "acceptance_criteria": 98,
+    "feature_files": 58,
+    "scenarios": 98,
+    "journey_coverage": 1,
+    "req_coverage": 1,
+    "ac_coverage": 1,
+    "test_coverage": 1,
+    "blocking_open_questions": 0,
+    "nfr_waivers": 0,
+    "gate_files": 11
+  },
+  "blocking_issues": [],
+  "open_waivers": [
+    {
+      "id": "UNDERSIZE-WAIVER-journeys",
+      "phase": "spec-workflow-3",
+      "floor": 6,
+      "actual": 4,
+      "status": "APPROVED",
+      "approved_by": "user",
+      "approved_at": "2026-09-10T17:57:54.359Z"
+    }
+  ],
+  "local_corrections": [
+    "IMPLEMENTATION-ROADMAP.md: all 41 phase rows remapped (orchestrator cited only 33/58 REQs, several against unrelated requirements)",
+    "RISKS-AND-MITIGATIONS.md: 5 of 13 cross-reference rows corrected",
+    ".bob/AGENTS.md: Carbon View Agent scope corrected from REQ-011/022 to REQ-021,049-053",
+    "REQ-053 honesty constraint restated in RISKS-AND-MITIGATIONS.md and .bob/AGENTS.md after being omitted from the entire generated pack"
+  ],
+  "result": "PASS"
+}

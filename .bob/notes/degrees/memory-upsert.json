@@ -1,0 +1,12 @@
+{
+  "name": "bob-sdlc:degrees",
+  "entityType": "decision",
+  "observations": [
+    "Glossary: ## Terms  ### TERM-001: Degrees - **Definition:** The daily word-ordering puzzle game in the CIC Games hub where the player orders 5 words along a hidden intensity scale. - **Synonyms:** Daily degree",
+    "User Journeys: ## Roles  | Role ID | Role Name | Type | Description | |---|---|---|---| | ROLE-001 | Player | Primary | Plays TERM-001 Degrees daily puzzle in the hub UI | | ROLE-002 | Hub (Host) | System | Provide",
+    "Requirements: ### REQ-001: Deterministic daily word set selection - **EARS Pattern:** Ubiquitous - **EARS Statement:** The Degrees plugin shall select the TERM-008 Word Set for the TERM-007 Daily Puzzle using TERM",
+    "Architecture: ## Components & Responsibilities  ### CIC Games Hub (Host Runtime) - **Responsibilities**   - Loads the Degrees plugin via the hub’s GamePlugin contract (ENTRY-002).   - Supplies `dateKey` (FIELD-002",
+    "Review: ## Risks (table sorted by severity descending)  | ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status | |---|---|---:|---:|---:|---:|---|---|-",
+    "Test Plan: ## Feature Files  ```gherkin"
+  ]
+}

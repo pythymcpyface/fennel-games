@@ -1,0 +1,50 @@
+# Review
+
+## Risks (table sorted by severity descending)
+
+| Risk ID | Title | Category | Likelihood | Impact | Severity | Affected requirements | Mitigation | Owner | Status |
+|---|---|---:|---:|---:|---|---|---|---|---|
+| RISK-001 | Content pack size/performance blow-up from per-target full rank tables | Technical / Schedule | High | High | **Critical** | REQ-003, REQ-008, NFR-001, NFR-002 | Define target dictionary size and max pack size budgets; adopt compact encoding (delta/RLE/bitpacking), streaming decode, and caching; add CI gate for pack size + on-device lookup latency; benchmark low-end devices. | Tech Lead + Content Builder | Open |
+| RISK-002 | “Past days remain stable” not guaranteed across contentPackVersion changes (archive determinism ambiguity) | Operational / Dependency | High | High | **Critical** | REQ-002, REQ-003, JOURNEY-006, EDGE-009 | Decide and document archive strategy: (A) ship explicit `dayId→puzzleId` mapping per pack, or (B) keep historical packs accessible in-app, or (C) freeze selection space forever; add acceptance tests that a dayId resolves to same puzzleId across app updates. | Product + Tech Lead | Open |
+| RISK-003 | Integrity hash verification design is underspecified (what is hashed; per-asset vs pack; canonicalization differences) | Security / Technical | Med | High | **High** | REQ-004, REQ-003 | Specify algorithm (e.g., SHA-256) and scope: hash each asset individually with explicit byte canonicalization; include schemaVersion + file list manifest; verify dictionary + puzzle map + rank tables, not only rank table bytes. Add cross-platform test vectors. | Security/Platform Lead | Open |
+| RISK-004 | Hint algorithm may be expensive or impossible without additional metadata/index | Technical | Med | High | **High** | REQ-013, REQ-014 | Define hint selection method and required auxiliary structures (e.g., “next-better list” per rank bucket, or an index from rank→word); add CI step generating hint indices; enforce O(1)/O(log n) hint retrieval. | Core Engineer + Content Builder | Open |
+| RISK-005 | Dictionary/rank-table coverage mismatch handling leads to hard-blocked gameplay for valid dictionary guesses | Operational / Reliability | Med | High | **High** | REQ-006, REQ-008, ERROR-002 | Treat as pack build failure: add CI validation that rank tables cover *exact* dictionaryId vocab (1:1); include dictionary checksum in rank-table header; add runtime “safe mode” UX (continue but mark puzzle invalid) if desired. | Content Builder | Open |
+| RISK-006 | dayId boundary rule unresolved; can cause perceived “wrong puzzle today” and streak disputes | Operational / UX | High | Med | **High** | REQ-001, JOURNEY-001 EDGE-001/002 | Make boundary rule explicit (likely UTC per ADR-004), communicate in UI (“Puzzle day uses UTC”); add a “today” indicator with UTC date; define streak computation consistent with dayId rule. | Product Owner | Open |
+| RISK-007 | Streak/gamesPlayed “first time per dayId” markers not defined; prone to double counting after crashes/multi-tab | Technical / Operational | Med | Med | **Medium** | REQ-018, REQ-019, JOURNEY-001 EDGE-003 | Add explicit per-day stats marker in storage (e.g., `completedDayIds` set or lastCompletedDayId + streak rules); use atomic/transactional writes where possible; specify merge strategy for multi-tab (LWW may lose increments). | Core Engineer | Open |
+| RISK-008 | Local persistence schema/version migrations not specified; corrupted state may break determinism or crash | Operational | Med | Med | **Medium** | REQ-017, ERROR-006 | Introduce `saveSchemaVersion` and `statsSchemaVersion`; implement validate/migrate/repair; add fuzz tests for corrupted JSON; ensure hydration clamps ranges (bestRank, guessIndex). | Platform Lead | Open |
+| RISK-009 | Share spoiler safety is weak (substring check only; startWord leakage; rank/tier patterns could identify target) | Security / Privacy | Med | Med | **Medium** | REQ-015, REQ-016, EDGE-008 | Expand spoiler policy: exclude startWord as well; exclude any literal guesses list; avoid exposing numeric ranks; ensure tiers are coarse; optionally add configurable “safe share mode” and tests with known target names. | Product + Core Engineer | Open |
+| RISK-010 | Multi-tab concurrency strategy “last-write-wins” can drop guesses or reorder indices | Technical | Low | High | **Medium** | REQ-010, REQ-017, EDGE-003/004 | Prefer append-only log with monotonic counters and merge-on-read; or use storage transactions/locks (IndexedDB) and per-guess UUID; add recovery reconciliation to recompute guessIndex from sorted timestamps. | Platform Lead | Open |
+| RISK-011 | Accessibility acceptance criteria incomplete for non-visual tier labels and focus management | Compliance (a11y) | Med | Low | **Low** | REQ-020, NFR-003, TERM-031 | Define tier label text equivalents, aria-live politeness, and focus return behavior on errors; add WCAG-oriented checks (non-color, keyboard traps). | UX/Frontend Lead | Open |
+
+## Missing Edge Cases
+
+- **PuzzleStatus transition to `in_progress` is not specified in requirements** (REQ-018 assumes it happens on first accepted guess, but no REQ defines the transition rule). Add explicit requirement: on first accepted guess, set `puzzleStatus=in_progress`.
+- **Archive dayId validation and range policy**: JOURNEY-006 has “day out of range” but no requirement defines how available ranges are determined (pack metadata? min/max day?).
+- **Device clock invalid or extreme** (far past/future): REQ-001 error mode says “Invalid clock value” but no behavior (fallback dayId? block?).
+- **Day change mid-session**: EDGE-002 says keep selection stable unless navigate; no requirement defines how “session dayId” is stored/locked and when it resets.
+- **Guess normalization rules are incomplete**: diacritics, apostrophes, hyphens, pluralization, and Unicode normalization (NFC/NFKD) can break dictionary matching across platforms.
+- **Maximum guess length / input sanitization**: FIELD-007 says length 1..64 but there is no requirement to enforce it; also no handling for whitespace-only input.
+- **RankTier definition and thresholds**: Tier count `0..N` exists, but N and threshold rules are unspecified; can lead to inconsistent UX and share encoding.
+- **Hint when only improvement is the target**: TERM-025 says do not reveal target unless it is the only improvement—this policy is not encoded as a requirement/AC.
+- **Storage “in-memory only” mode persistence**: ERROR-003 mentions exporting session text optionally; not in requirements.
+- **Service Worker caching interactions**: PWA SW could serve stale content pack after update, causing packVersion mismatch with cached assets; no update/cache invalidation policy defined.
+- **Localization**: NFR-003 references “localized equivalent”; no i18n requirements (supported locales, deterministic text vs localization affecting share artifact).
+- **Asset integrity hash for composite pack**: FIELD-030 implies a single hash; but many assets exist. Need edge-case handling for partial updates/corruption.
+- **Stats reset scope**: ERROR-006 says reset stats while keeping current day separate “where possible”—not specified how separation is guaranteed.
+
+## Dependency Conflicts
+
+- **Circular policy dependency (archive stability)**: “Deterministic selection uses (dayId, packVersion, dictionaryId)” conflicts with “past days remain stable” when packVersion changes. Stability depends on whether you keep the old packVersion available or introduce a mapping layer. This is currently a logical dependency conflict across REQ-002/REQ-003/JOURNEY-006/EDGE-009.
+- **Hint determinism vs required metadata**: REQ-013 demands deterministic hint selection, but the architecture notes “iteration/aux index is available for hinting” as an assumption. If runtime iteration order differs (object key order, map enumeration), determinism can break. Dependency on a *defined ordering* (e.g., by rank then lexicographic) is missing.
+- **Asset integrity verification placement**: Architecture sequence verifies hash on rankTableBytes using a single `assetIntegrityHash` from pack metadata, which implies either (a) the hash is per-rank-table but then metadata must be per-asset, or (b) it is a pack-level hash but then verifying only one asset is insufficient. Requirements and architecture are inconsistent here.
+
+## Recommendations
+
+1. **Decide and document the archive stability mechanism** (mapping vs shipping historical packs vs frozen selection space), then add acceptance tests proving dayId→puzzleId remains unchanged across app updates for a defined historical window.
+2. **Introduce explicit content pack format contracts**: schema versioning, manifest listing all assets with per-asset SHA-256 hashes, and deterministic decoding rules; align REQ-004/architecture to verify the correct scope.
+3. **Set hard budgets and CI gates for pack size + runtime performance** (max MB, max lookup latency, max memory); require benchmarks on low-end Android and older iPhones.
+4. **Specify deterministic ordering everywhere it matters** (hint selection ordering, dictionary token normalization with Unicode rules, tier threshold computation) and add cross-platform golden tests (test vectors).
+5. **Add a requirement for `puzzleStatus` transitions**, especially `not_started→in_progress` on first accepted guess, and define post-win behavior (can users keep guessing or is input locked).
+6. **Define robust stats/streak idempotency markers** (per-day started/completed flags) and a merge strategy for multi-tab/multi-window to prevent double counting and lost progress.
+7. **Expand spoiler-safety requirements** beyond substring target checks: exclude startWord, prohibit including any guessed words, and explicitly define what share encodes; add automated tests that share never contains sensitive tokens.
+8. **Define PWA update/cache strategy** (service worker versioning and cache busting for content packs) to prevent mixed packVersion/assets causing ERROR-001/002 in the field.
