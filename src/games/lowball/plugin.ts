@@ -224,6 +224,12 @@ class Lowball implements GameInstance {
   }
 
   currentResult(): DailyResult {
+    // Guard: on the multiplayer join path, this.state is never initialised
+    // (startMpJoin is called instead of startDaily). Return a safe neutral
+    // result so the hub dashboard does not crash. (REQ-FIX-001)
+    if (!this.state) {
+      return { gameId: "lowball", dayId: this.dayId, played: false, solved: false };
+    }
     // Practice never contributes to the hub dashboard.
     const isDaily = this.mode === "daily";
     return {
