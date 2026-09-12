@@ -91,8 +91,10 @@ export class LowballRelayDO implements DurableObject {
   private state: DurableObjectState;
   private roomState: RoomState | null = null;
   private puzzle: Puzzle | null = null;
-  // Map from WebSocket to player slot index for quick routing
-  private wsToSlot = new Map<WebSocket, number>();
+  // NOTE: wsToSlot removed — plain Map is lost on DO hibernation.
+  // Slot indices are now stored via ws.serializeAttachment() and read with
+  // ws.deserializeAttachment() so they survive across hibernation/wake cycles.
+  // (REQ-FIX-001 / BUG-1 root cause fix)
 
   constructor(state: DurableObjectState) {
     this.state = state;
@@ -184,7 +186,9 @@ export class LowballRelayDO implements DurableObject {
     };
 
     this.roomState = { ...this.roomState, players: [...this.roomState.players, player] };
-    this.wsToSlot.set(server, slotIndex);
+    // REQ-FIX-001: persist slot index on the WS so it survives DO hibernation.
+    // Previously used a plain Map (this.wsToSlot) which was wiped on every wake.
+    (server as unknown as { serializeAttachment(v: unknown): void }).serializeAttachment({ slotIndex });
 
     // Confirm join to the new player
     const joinMsg: ServerMessage = {
@@ -233,7 +237,9 @@ export class LowballRelayDO implements DurableObject {
       return;
     }
 
-    const slotIndex = this.wsToSlot.get(ws);
+    // REQ-FIX-001: read slotIndex from WS attachment (survives hibernation).
+    const attachment = (ws as unknown as { deserializeAttachment(): unknown }).deserializeAttachment() as { slotIndex?: number } | null;
+    const slotIndex = attachment?.slotIndex;
     if (slotIndex === undefined || this.roomState === null) return;
 
     switch (msg.type) {
@@ -250,8 +256,9 @@ export class LowballRelayDO implements DurableObject {
   }
 
   webSocketClose(ws: WebSocket, code: number, reason: string): void {
-    const slotIndex = this.wsToSlot.get(ws);
-    this.wsToSlot.delete(ws);
+    // REQ-FIX-001: read slotIndex from attachment (survives hibernation).
+    const attachment = (ws as unknown as { deserializeAttachment(): unknown }).deserializeAttachment() as { slotIndex?: number } | null;
+    const slotIndex = attachment?.slotIndex;
     if (slotIndex === undefined || this.roomState === null) return;
 
     const player = this.roomState.players.find((p) => p.slotIndex === slotIndex);
@@ -484,10 +491,11 @@ export class LowballRelayDO implements DurableObject {
   private async advanceSweepOrEnd(): Promise<void> {
     if (this.roomState === null) return;
 
-    if (this.roomState.phase === "sweep") {
+    // Accept both "sweep" and "between-sweeps" (the guard phase set by checkEarlyAdvance)
+    if (this.roomState.phase === "sweep" || this.roomState.phase === "between-sweeps") {
       const nextSweep = this.roomState.sweepIndex + 1;
       if (nextSweep < SWEEPS_TOTAL) {
-        this.roomState = { ...this.roomState, sweepIndex: nextSweep };
+        this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: nextSweep };
         await this.broadcastSweepStart(nextSweep);
       } else {
         // Both sweeps complete — evaluate winner
