@@ -68,6 +68,8 @@ interface MpState {
   sweepIndex: number;
   deadlineTs: number;
   submissions: Map<number, { word: string | null; score: number; verdict: string; runningTotal: number }>;
+  /** TURN-BASED: slot whose turn it is now; -1 when no turn is active. */
+  activeSlot: number;
   // tiebreak
   tiebreakRound: number;
   tiedSlots: number[];
@@ -92,6 +94,7 @@ function freshMpState(): MpState {
     players: [],
     sweepIndex: 0,
     deadlineTs: 0,
+    activeSlot: -1,
     submissions: new Map(),
     tiebreakRound: 0,
     tiedSlots: [],
@@ -607,7 +610,12 @@ class Lowball implements GameInstance {
           ...this.mpState,
           sweepIndex: event.sweepIndex,
           deadlineTs: event.deadlineTs,
-          submissions: new Map(),
+          activeSlot: event.activeSlot,
+          // TURN-BASED: clear reveals only when a NEW sweep begins, so earlier
+          // players' answers stay on screen while later players take their turn.
+          submissions: event.activeSlot === this.firstTurnSlot(event.sweepIndex)
+            ? new Map()
+            : this.mpState.submissions,
           tiebreakRound: 0,
         };
         // Reset the tension counter for the new sweep (REQ-051).
@@ -623,7 +631,10 @@ class Lowball implements GameInstance {
           tiebreakRound: event.round,
           tiedSlots: event.tiedSlots,
           deadlineTs: event.deadlineTs,
-          submissions: new Map(),
+          activeSlot: event.activeSlot,
+          submissions: this.mpState.tiebreakRound === event.round
+            ? this.mpState.submissions
+            : new Map(),
         };
         this.stopMpTicking();
         this.mpTickCounter = 0;
@@ -691,6 +702,16 @@ class Lowball implements GameInstance {
    * Uses round() rather than ceil() so a fresh 30 000 ms deadline reads "30s"
    * for a full second instead of flicking to 29s almost immediately.
    */
+  /**
+   * Lowest slot among players present — the slot that opens each sweep.
+   * Used to tell "a new sweep just began" (clear the board) from "the turn moved
+   * on within the same sweep" (keep earlier answers visible).
+   */
+  private firstTurnSlot(_sweepIndex: number): number {
+    const slots = this.mpState.players.map((p) => p.slotIndex).sort((a, b) => a - b);
+    return slots[0] ?? 0;
+  }
+
   private mpSecondsLeft(): number {
     return Math.max(0, Math.round((this.mpState.deadlineTs - Date.now()) / 1000));
   }
@@ -1081,10 +1102,15 @@ class Lowball implements GameInstance {
     }
     this.root.append(grid);
 
-    // Answer input — only shown if it's my turn and I haven't submitted
+    // Answer input — only shown when it is literally this player's turn.
+    // TURN-BASED: activeSlot cycles through each player one at a time; showing
+    // the input box to a player before their turn would let them pre-type but
+    // the server would reject the submission with NOT_YOUR_TURN anyway, so we
+    // hide it entirely to keep the UX unambiguous.
+    const isMyTurn = s.activeSlot === s.mySlotIndex;
     const iAmTiedActive = !isTiebreak || s.tiedSlots.includes(s.mySlotIndex);
     const iHaveSubmitted = s.submissions.has(s.mySlotIndex);
-    if (iAmTiedActive && !iHaveSubmitted) {
+    if (isMyTurn && iAmTiedActive && !iHaveSubmitted) {
       const form = el("form", { class: "row" }) as HTMLFormElement;
       const input = el("input", { class: "text-input" }) as HTMLInputElement;
       input.id = "lb-mp-answer";
@@ -1108,6 +1134,9 @@ class Lowball implements GameInstance {
       setTimeout(() => input.focus(), 50);
     } else if (iAmTiedActive && iHaveSubmitted) {
       this.root.append(el("p", { class: "sub", text: "Answer locked in — waiting for others…" }));
+    } else if (iAmTiedActive && !iHaveSubmitted) {
+      // It's someone else's turn this sweep; my turn is coming.
+      this.root.append(el("p", { class: "sub", text: "Waiting for your turn…" }));
     } else {
       this.root.append(el("p", { class: "sub", text: "Spectating this tiebreak sweep" }));
     }

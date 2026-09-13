@@ -36,7 +36,6 @@ import type {
   RoomState,
   ServerMessage,
   ClientMessage,
-  SweepRecord,
   LeaderboardEntry,
 } from "../../../src/games/lowball/mp-types.ts";
 import type { Puzzle } from "../../../src/games/lowball/types.ts";
@@ -222,6 +221,7 @@ export class LowballRelayDO implements DurableObject {
         tiebreakRoundNumber: 0,
         tiedPlayerSlots: [],
         puzzleId: null,
+        activePlayerSlot: -1,
       };
       // REQ-047: lifecycle log
       console.log(`[lowball-relay] room-created roomCode=${roomCode}`);
@@ -339,7 +339,7 @@ export class LowballRelayDO implements DurableObject {
     await this.save();
   }
 
-  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+  async webSocketClose(ws: WebSocket, code: number, _reason: string): Promise<void> {
     // REQ-FIX-002: rehydrate before mutating.
     await this.load();
 
@@ -396,13 +396,51 @@ export class LowballRelayDO implements DurableObject {
     const phase = this.roomState.phase;
     if (phase !== "sweep" && phase !== "tiebreak") return;
 
-    // REQ-018: auto-blank all players who have not submitted this sweep
-    this.applyPendingAutoBlanks();
-    // REQ-047
-    console.log(`[lowball-relay] sweep-completed sweepIndex=${this.roomState.sweepIndex} phase=${phase}`);
+    // TURN-BASED: the alarm is the ACTIVE player's 30s expiring. Auto-blank only
+    // that player (REQ-018) — everyone else still gets their own full window —
+    // then hand on the turn.
+    const active = this.roomState.activePlayerSlot;
+    if (active < 0) return;
+    this.autoBlankSlot(active);
+    console.log(`[lowball-relay] turn-timeout slot=${active} phase=${phase}`);
 
-    await this.advanceSweepOrEnd();
+    await this.advanceTurn();
     await this.save();
+  }
+
+  /** Record a timeout answer for one slot in the current phase (REQ-018). */
+  private autoBlankSlot(slot: number): void {
+    if (this.roomState === null) return;
+    const isTiebreak = this.roomState.phase === "tiebreak";
+    const need = this.expectedAnswers();
+    const players = this.roomState.players.map((p) => {
+      if (p.slotIndex !== slot) return p;
+      const given = isTiebreak ? p.tiebreakSweeps.length : p.sweeps.length;
+      if (given >= need) return p; // already answered
+      const blank = applyAutoBlank();
+      return isTiebreak
+        ? { ...p, tiebreakSweeps: [...p.tiebreakSweeps, blank] }
+        : { ...p, sweeps: [...p.sweeps, blank] };
+    });
+    this.roomState = { ...this.roomState, players };
+
+    const p = this.roomState.players.find((x) => x.slotIndex === slot);
+    if (!p) return;
+    const list = isTiebreak ? p.tiebreakSweeps : p.sweeps;
+    const last = list[list.length - 1];
+    if (last?.verdict === "TIMEOUT") {
+      this.broadcastAll({
+        type: "reveal",
+        reveal: {
+          slotIndex: slot,
+          displayName: p.displayName,
+          submittedWord: null,
+          panelScore: 100,
+          verdict: "TIMEOUT",
+          runningTotal: p.sweeps.reduce((sum, sw) => sum + sw.panelScore, 0),
+        },
+      });
+    }
   }
 
   // =========================================================================
@@ -424,7 +462,7 @@ export class LowballRelayDO implements DurableObject {
       return;
     }
     this.puzzle = p;
-    this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: 0, puzzleId: p.puzzleId };
+    this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: 0, puzzleId: p.puzzleId, activePlayerSlot: -1 };
 
     // REQ-012: broadcast puzzle info
     this.broadcastAll({
@@ -436,8 +474,10 @@ export class LowballRelayDO implements DurableObject {
       affixValue: p.affixValue,
     });
 
-    // REQ-013: broadcast sweep-start with deadline
-    this.broadcastSweepStart(0);
+    // TURN-BASED: hand the first turn to the lowest connected slot with its own
+    // fresh 30s window. Each subsequent turn restarts the timer (see beginTurn).
+    const first = this.nextTurnSlot(-1);
+    if (first !== null) void this.beginTurn(first);
   }
 
   // =========================================================================
@@ -470,6 +510,13 @@ export class LowballRelayDO implements DurableObject {
 
     const player = this.roomState.players.find((p) => p.slotIndex === slotIndex);
     if (!player) return;
+
+    // TURN-BASED: reject submissions from anyone but the active player, so a
+    // fast player cannot consume another player's turn or timer.
+    if (this.roomState.activePlayerSlot !== slotIndex) {
+      ws.send(JSON.stringify({ type: "error", reason: "NOT_YOUR_TURN" } satisfies ServerMessage));
+      return;
+    }
 
     // REQ-017: reject duplicate submission in same sweep
     const sweeps = phase === "sweep" ? player.sweeps : player.tiebreakSweeps;
@@ -513,110 +560,121 @@ export class LowballRelayDO implements DurableObject {
       },
     });
 
-    // REQ-019: early advance when all active players have submitted
-    this.checkEarlyAdvance();
+    // TURN-BASED: this player is done; give the next player a fresh 30s turn.
+    void this.advanceTurn();
   }
 
   // =========================================================================
   // Sweep advance / end-of-round logic
   // =========================================================================
 
-  private async broadcastSweepStart(sweepIndex: number): Promise<void> {
-    const now = Date.now();
-    const deadline = now + SWEEP_DEADLINE_MS;
-    // REQ-014: schedule alarm
+  // =========================================================================
+  // TURN ORDER (turn-based play: one player at a time, 30s each)
+  // =========================================================================
+
+  /**
+   * Slots eligible to take a turn in the current phase, in ascending slot order.
+   * Main sweeps: every connected player. Tiebreak: only the tied players.
+   */
+  private turnOrder(): number[] {
+    if (this.roomState === null) return [];
+    const connected = this.roomState.players
+      .filter((p) => p.isConnected)
+      .map((p) => p.slotIndex)
+      .sort((a, b) => a - b);
+    if (this.roomState.phase === "tiebreak") {
+      return connected.filter((slot) => this.roomState!.tiedPlayerSlots.includes(slot));
+    }
+    return connected;
+  }
+
+  /** How many answers `slot` has recorded for the current phase. */
+  private answersGiven(slot: number): number {
+    if (this.roomState === null) return 0;
+    const p = this.roomState.players.find((x) => x.slotIndex === slot);
+    if (!p) return 0;
+    return this.roomState.phase === "tiebreak" ? p.tiebreakSweeps.length : p.sweeps.length;
+  }
+
+  /** Answers each eligible player should have once the current round is complete. */
+  private expectedAnswers(): number {
+    if (this.roomState === null) return 0;
+    return this.roomState.phase === "tiebreak"
+      ? this.roomState.tiebreakRoundNumber
+      : this.roomState.sweepIndex + 1;
+  }
+
+  /**
+   * Next slot still owing an answer this round, or null when everyone has gone.
+   * Starts looking AFTER `afterSlot` so turns rotate in order.
+   */
+  private nextTurnSlot(afterSlot: number): number | null {
+    const order = this.turnOrder();
+    if (order.length === 0) return null;
+    const need = this.expectedAnswers();
+    const start = order.findIndex((s) => s > afterSlot);
+    const rotated = start === -1 ? order : [...order.slice(start), ...order.slice(0, start)];
+    for (const slot of rotated) {
+      if (this.answersGiven(slot) < need) return slot;
+    }
+    return null;
+  }
+
+  /**
+   * Give `slot` the turn with a FRESH 30s deadline, and tell every client.
+   * This is the heart of turn-based play: the timer restarts per player, so a
+   * later player never inherits a partially-elapsed window.
+   */
+  private async beginTurn(slot: number): Promise<void> {
+    if (this.roomState === null) return;
+    this.roomState = { ...this.roomState, activePlayerSlot: slot };
+    const deadline = Date.now() + SWEEP_DEADLINE_MS;
     await this.state.storage.setAlarm(deadline);
-    this.broadcastAll({ type: "sweep-start", sweepIndex, sweepDeadlineTimestamp: deadline });
-    // REQ-047
-    console.log(`[lowball-relay] sweep-started sweepIndex=${sweepIndex} deadline=${deadline}`);
-  }
-
-  private applyPendingAutoBlanks(): void {
-    if (this.roomState === null) return;
-    const phase = this.roomState.phase;
-    const updatedPlayers = this.roomState.players.map((p) => {
-      if (!p.isConnected) {
-        // Player already disconnected — auto-blank applies at deadline (REQ-034)
-      }
-      const sweeps = phase === "sweep" ? p.sweeps : p.tiebreakSweeps;
-      const expectedLength = phase === "sweep"
-        ? this.roomState!.sweepIndex + 1
-        : this.roomState!.tiebreakRoundNumber;
-
-      if (sweeps.length >= expectedLength) return p; // already submitted
-
-      const blank = applyAutoBlank();
-      // REQ-053: null word not recorded in usedWords (applyAutoBlank returns submittedWord=null)
-      if (phase === "sweep") {
-        return { ...p, sweeps: [...p.sweeps, blank] };
-      } else {
-        return { ...p, tiebreakSweeps: [...p.tiebreakSweeps, blank] };
-      }
-    });
-
-    this.roomState = { ...this.roomState, players: updatedPlayers };
-
-    // Broadcast auto-blanks (REQ-016 — same broadcast path as normal submissions)
-    for (const p of updatedPlayers) {
-      const sweeps = phase === "sweep" ? p.sweeps : p.tiebreakSweeps;
-      const last = sweeps[sweeps.length - 1];
-      if (last?.verdict === "TIMEOUT") {
-        this.broadcastAll({
-          type: "reveal",
-          reveal: {
-            slotIndex: p.slotIndex,
-            displayName: p.displayName,
-            submittedWord: null,
-            panelScore: 100,
-            verdict: "TIMEOUT",
-            runningTotal: p.sweeps.reduce((s, sw) => s + sw.panelScore, 0),
-          },
-        });
-      }
+    const isTiebreak = this.roomState.phase === "tiebreak";
+    if (isTiebreak) {
+      this.broadcastAll({
+        type: "tiebreak-start",
+        tiebreakRoundNumber: this.roomState.tiebreakRoundNumber,
+        tiedSlots: this.roomState.tiedPlayerSlots,
+        sweepDeadlineTimestamp: deadline,
+        activeSlot: slot,
+      });
+    } else {
+      this.broadcastAll({
+        type: "sweep-start",
+        sweepIndex: this.roomState.sweepIndex,
+        sweepDeadlineTimestamp: deadline,
+        activeSlot: slot,
+      });
     }
+    console.log(`[lowball-relay] turn-started slot=${slot} phase=${this.roomState.phase} deadline=${deadline}`);
   }
 
-  private checkEarlyAdvance(): void {
+  /**
+   * Hand the turn to the next player, or finish the round if nobody is left.
+   * Called after a submission and after a turn times out.
+   */
+  private async advanceTurn(): Promise<void> {
     if (this.roomState === null) return;
-    const phase = this.roomState.phase;
-    if (phase !== "sweep" && phase !== "tiebreak") return; // guard: already advancing
-    const connectedPlayers = this.roomState.players.filter((p) => p.isConnected);
-
-    const allSubmitted = connectedPlayers.every((p) => {
-      const sweeps = phase === "sweep" ? p.sweeps : p.tiebreakSweeps;
-      const expected = phase === "sweep"
-        ? this.roomState!.sweepIndex + 1
-        : this.roomState!.tiebreakRoundNumber;
-      return sweeps.length >= expected;
-    });
-
-    if (allSubmitted) {
-      // Cancel alarm and advance immediately (REQ-019).
-      // Mark phase as "between-sweeps" before the async advance to prevent the
-      // alarm callback from triggering a second advance if it fires concurrently.
-      // Cloudflare DO guarantees serial event-loop execution, but the explicit guard
-      // makes the intent unambiguous.
-      this.roomState = { ...this.roomState, phase: "between-sweeps" };
-      void this.state.storage.deleteAlarm?.();
-      void this.advanceSweepOrEnd();
+    const next = this.nextTurnSlot(this.roomState.activePlayerSlot);
+    if (next !== null) {
+      await this.beginTurn(next);
+      return;
     }
-  }
-
-  private async advanceSweepOrEnd(): Promise<void> {
-    if (this.roomState === null) return;
-
-    // Accept both "sweep" and "between-sweeps" (the guard phase set by checkEarlyAdvance)
-    if (this.roomState.phase === "sweep" || this.roomState.phase === "between-sweeps") {
-      const nextSweep = this.roomState.sweepIndex + 1;
-      if (nextSweep < SWEEPS_TOTAL) {
-        this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: nextSweep };
-        await this.broadcastSweepStart(nextSweep);
-      } else {
-        // Both sweeps complete — evaluate winner
-        await this.evaluateRoundEnd();
-      }
-    } else if (this.roomState.phase === "tiebreak") {
+    // Everyone eligible has answered for this round.
+    this.roomState = { ...this.roomState, activePlayerSlot: -1 };
+    if (this.roomState.phase === "tiebreak") {
       await this.evaluateTiebreakEnd();
+      return;
+    }
+    const nextSweep = this.roomState.sweepIndex + 1;
+    if (nextSweep < SWEEPS_TOTAL) {
+      this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: nextSweep };
+      const first = this.nextTurnSlot(-1);
+      if (first !== null) await this.beginTurn(first);
+      else await this.evaluateRoundEnd();
+    } else {
+      await this.evaluateRoundEnd();
     }
   }
 
@@ -638,18 +696,13 @@ export class LowballRelayDO implements DurableObject {
         phase: "tiebreak",
         tiebreakRoundNumber: 1,
         tiedPlayerSlots: result.tiedSlots,
+        activePlayerSlot: -1,
       };
-      const now = Date.now();
-      const deadline = now + SWEEP_DEADLINE_MS;
-      await this.state.storage.setAlarm(deadline);
-      this.broadcastAll({
-        type: "tiebreak-start",
-        tiebreakRoundNumber: 1,
-        tiedSlots: result.tiedSlots,
-        sweepDeadlineTimestamp: deadline,
-      });
       // REQ-047
       console.log(`[lowball-relay] tiebreak-started round=1 tiedSlots=${JSON.stringify(result.tiedSlots)}`);
+      // TURN-BASED: first tied player gets their own fresh 30s.
+      const first = this.nextTurnSlot(-1);
+      if (first !== null) await this.beginTurn(first);
     }
   }
 
@@ -698,16 +751,11 @@ export class LowballRelayDO implements DurableObject {
         ...this.roomState,
         tiebreakRoundNumber: nextRound,
         tiedPlayerSlots: result.tiedSlots.map((i) => tiedPlayers[i]?.slotIndex ?? i),
+        activePlayerSlot: -1,
       };
-      const now = Date.now();
-      const deadline = now + SWEEP_DEADLINE_MS;
-      await this.state.storage.setAlarm(deadline);
-      this.broadcastAll({
-        type: "tiebreak-start",
-        tiebreakRoundNumber: nextRound,
-        tiedSlots: this.roomState.tiedPlayerSlots,
-        sweepDeadlineTimestamp: deadline,
-      });
+      // TURN-BASED: first tied player of the new round gets a fresh 30s.
+      const firstR2 = this.nextTurnSlot(-1);
+      if (firstR2 !== null) await this.beginTurn(firstR2);
     } else {
       // REQ-028: 2 rounds exhausted → joint winners
       const jointSlots = result.tiedSlots.map((i) => tiedPlayers[i]?.slotIndex ?? i);

@@ -32,6 +32,12 @@ export interface RoomState {
   tiebreakRoundNumber: number; // 0 = none, 1 = round 1, 2 = round 2
   tiedPlayerSlots: number[]; // slot indices of tied players (only populated during tiebreak)
   puzzleId: string | null;
+  /**
+   * TURN-BASED: slot index of the player whose turn it is right now.
+   * Each turn gets its own fresh 30s deadline; the turn advances on submit or
+   * timeout. -1 means no turn is active (lobby / between phases / done).
+   */
+  activePlayerSlot: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,8 +72,8 @@ export type ServerMessage =
   | { type: "joined"; slotIndex: number; displayName: string; isHost: boolean; players: PlayerInfo[] }
   | { type: "player-list"; players: PlayerInfo[]; roomPlayerCount: number }
   | { type: "start"; puzzleId: string; categoryLabel: string; parValue: number; affixType: string; affixValue: string }
-  | { type: "sweep-start"; sweepIndex: number; sweepDeadlineTimestamp: number }
-  | { type: "tiebreak-start"; tiebreakRoundNumber: number; tiedSlots: number[]; sweepDeadlineTimestamp: number }
+  | { type: "sweep-start"; sweepIndex: number; sweepDeadlineTimestamp: number; activeSlot: number }
+  | { type: "tiebreak-start"; tiebreakRoundNumber: number; tiedSlots: number[]; sweepDeadlineTimestamp: number; activeSlot: number }
   | { type: "reveal"; reveal: SweepReveal }
   | { type: "leaderboard"; board: LeaderboardEntry[] }
   | { type: "host-left" }

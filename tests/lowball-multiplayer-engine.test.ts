@@ -73,6 +73,7 @@ function makeRoomState(playerCount = 2): RoomState {
     tiebreakRoundNumber: 0,
     tiedPlayerSlots: [],
     puzzleId: "puz-0000",
+    activePlayerSlot: -1,
   };
 }
 

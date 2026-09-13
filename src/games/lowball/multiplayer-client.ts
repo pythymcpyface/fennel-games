@@ -109,8 +109,8 @@ export type ClientEvent =
   | { kind: "joined"; slotIndex: number; displayName: string; isHost: boolean }
   | { kind: "player-list"; players: { slotIndex: number; displayName: string; isHost: boolean }[]; count: number }
   | { kind: "start"; categoryLabel: string; parValue: number; affixType: string; affixValue: string }
-  | { kind: "sweep-start"; sweepIndex: number; deadlineTs: number }
-  | { kind: "tiebreak-start"; round: number; tiedSlots: number[]; deadlineTs: number }
+  | { kind: "sweep-start"; sweepIndex: number; deadlineTs: number; activeSlot: number }
+  | { kind: "tiebreak-start"; round: number; tiedSlots: number[]; deadlineTs: number; activeSlot: number }
   | { kind: "reveal"; slotIndex: number; displayName: string; word: string | null; score: number; verdict: string; runningTotal: number }
   | { kind: "leaderboard"; board: MpLeaderboardEntry[] }
   | { kind: "host-left" }
@@ -204,11 +204,11 @@ export class MultiplayerClient {
         break;
 
       case "sweep-start":
-        this.handler({ kind: "sweep-start", sweepIndex: msg.sweepIndex, deadlineTs: msg.sweepDeadlineTimestamp });
+        this.handler({ kind: "sweep-start", sweepIndex: msg.sweepIndex, deadlineTs: msg.sweepDeadlineTimestamp, activeSlot: msg.activeSlot });
         break;
 
       case "tiebreak-start":
-        this.handler({ kind: "tiebreak-start", round: msg.tiebreakRoundNumber, tiedSlots: msg.tiedSlots, deadlineTs: msg.sweepDeadlineTimestamp });
+        this.handler({ kind: "tiebreak-start", round: msg.tiebreakRoundNumber, tiedSlots: msg.tiedSlots, deadlineTs: msg.sweepDeadlineTimestamp, activeSlot: msg.activeSlot });
         break;
 
       case "reveal":
