@@ -244,3 +244,60 @@ test.describe("Multiplayer round — disconnect handling", () => {
     await expect(page.getByText(/1\/4 players/i)).toBeVisible({ timeout: 8000 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tension counter + countdown in multiplayer.
+//
+// The counter bar column (.lb-counter / .lb-bars / .lb-score-num) was present in
+// single-player but omitted from the multiplayer round view. The countdown also
+// only painted inside setInterval, whose first tick is 250ms away, so between
+// sweeps it briefly showed the PREVIOUS sweep's value ("timer didn't reset").
+// ---------------------------------------------------------------------------
+
+test.describe("Multiplayer round — tension counter and countdown", () => {
+  test("counter bar column is present in the multiplayer round view", async ({ page, context }) => {
+    const inviteUrl = await hostCreateRoom(page, "Alice");
+    const guestPage = await guestJoin(context, inviteUrl, "Bob");
+    await startRound(page, guestPage);
+
+    // The full bar column must render, matching single-player (100 bars).
+    await expect(page.locator(".lb-counter")).toBeVisible({ timeout: 8000 });
+    await expect(page.locator(".lb-bars")).toBeVisible();
+    await expect(page.locator(".lb-bar")).toHaveCount(100);
+    await expect(page.locator(".lb-score-num")).toBeVisible();
+    // The panel-score disclosure travels with the counter.
+    await expect(page.locator(".lb-disclosure")).toBeVisible();
+
+    // Guest sees it too.
+    await expect(guestPage.locator(".lb-bar")).toHaveCount(100);
+
+    await guestPage.close();
+  });
+
+  test("counter bars are unlit before any submission", async ({ page, context }) => {
+    const inviteUrl = await hostCreateRoom(page, "Alice");
+    const guestPage = await guestJoin(context, inviteUrl, "Bob");
+    await startRound(page, guestPage);
+
+    // No reveal yet, so the counter reads 0 and no bar is lit.
+    await expect(page.locator(".lb-score-num")).toHaveText("0", { timeout: 8000 });
+    await expect(page.locator(".lb-bar.lb-bar-on")).toHaveCount(0);
+
+    await guestPage.close();
+  });
+
+  test("countdown shows a sane starting value immediately on sweep start", async ({ page, context }) => {
+    const inviteUrl = await hostCreateRoom(page, "Alice");
+    const guestPage = await guestJoin(context, inviteUrl, "Bob");
+    await startRound(page, guestPage);
+
+    // Must never show a stale value from a previous sweep, and never exceed the
+    // 30s deadline. Sampled straight after render, before the first interval tick.
+    const txt = await page.locator(".lb-mp-countdown").textContent();
+    const secs = Number((txt ?? "").replace(/[^0-9]/g, ""));
+    expect(secs).toBeGreaterThan(0);
+    expect(secs).toBeLessThanOrEqual(30);
+
+    await guestPage.close();
+  });
+});

@@ -121,6 +121,9 @@ class Lowball implements GameInstance {
   private mpClient: MultiplayerClient | null = null;
   private mpState: MpState = freshMpState();
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
+  /** Tension-counter value for the multiplayer view (own score reveal). */
+  private mpTickCounter = 0;
+  private mpTickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly root: HTMLElement, private readonly svc: GameServices) {}
 
@@ -536,12 +539,18 @@ class Lowball implements GameInstance {
    * which skipped the name form entirely.)
    */
   private startMpJoin(roomCode: string): void {
+    this.stopMpCountdown();
+    this.stopMpTicking();
+    this.mpTickCounter = 0;
     this.mpState = { ...freshMpState(), phase: "idle", roomCode };
     this.renderLobby();
   }
 
   /** REQ-009 (Create Room): called from lobby UI "Host a game" button. */
   private startMpCreate(): void {
+    this.stopMpCountdown();
+    this.stopMpTicking();
+    this.mpTickCounter = 0;
     this.mpState = { ...freshMpState(), phase: "lobby-create" };
     this.renderLobby();
   }
@@ -601,6 +610,9 @@ class Lowball implements GameInstance {
           submissions: new Map(),
           tiebreakRound: 0,
         };
+        // Reset the tension counter for the new sweep (REQ-051).
+        this.stopMpTicking();
+        this.mpTickCounter = 0;
         this.renderLiveRound();
         this.startMpCountdown();
         break;
@@ -613,6 +625,8 @@ class Lowball implements GameInstance {
           deadlineTs: event.deadlineTs,
           submissions: new Map(),
         };
+        this.stopMpTicking();
+        this.mpTickCounter = 0;
         this.renderLiveRound();
         this.startMpCountdown();
         break;
@@ -627,12 +641,17 @@ class Lowball implements GameInstance {
         });
         this.mpState = { ...this.mpState, submissions: updated };
         this.updateLiveReveal(event.slotIndex);
+        // REQ-051: animate the tension counter for this player's OWN reveal only.
+        if (event.slotIndex === this.mpState.mySlotIndex) {
+          this.startMpTicking(event.score);
+        }
         break;
       }
 
       case "leaderboard":
         this.mpState = { ...this.mpState, phase: "round-done", leaderboard: event.board };
         this.stopMpCountdown();
+        this.stopMpTicking();
         this.renderLeaderboard();
         break;
 
@@ -667,13 +686,31 @@ class Lowball implements GameInstance {
   // MP countdown (REQ-043: aria-live region updated; REQ-013: deadline-based)
   // -------------------------------------------------------------------------
 
+  /**
+   * Seconds remaining in the current sweep, floored at 0.
+   * Uses round() rather than ceil() so a fresh 30 000 ms deadline reads "30s"
+   * for a full second instead of flicking to 29s almost immediately.
+   */
+  private mpSecondsLeft(): number {
+    return Math.max(0, Math.round((this.mpState.deadlineTs - Date.now()) / 1000));
+  }
+
+  /** Paint the countdown. Single source of truth for both render and tick. */
+  private paintMpCountdown(): void {
+    const cdEl = this.root.querySelector(".lb-mp-countdown");
+    if (cdEl !== null) cdEl.textContent = `${this.mpSecondsLeft()}s`;
+  }
+
   private startMpCountdown(): void {
     this.stopMpCountdown();
     let lastAnnounced = -1;
+    // Paint immediately: setInterval's first tick is 250 ms away, and until then
+    // the element would keep the previous sweep's value — the visible "timer did
+    // not reset" glitch between sweeps.
+    this.paintMpCountdown();
     this.countdownTimer = setInterval(() => {
-      const secsLeft = Math.max(0, Math.ceil((this.mpState.deadlineTs - Date.now()) / 1000));
-      const cdEl = this.root.querySelector(".lb-mp-countdown");
-      if (cdEl) cdEl.textContent = `${secsLeft}s`;
+      const secsLeft = this.mpSecondsLeft();
+      this.paintMpCountdown();
       // Announce at 10s, 5s for screen readers (REQ-043)
       if ((secsLeft === 10 || secsLeft === 5) && secsLeft !== lastAnnounced) {
         lastAnnounced = secsLeft;
@@ -689,6 +726,52 @@ class Lowball implements GameInstance {
       clearInterval(this.countdownTimer);
       this.countdownTimer = null;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Multiplayer tension counter (REQ-051) — animates the bar column up to this
+  // player's own revealed score, matching the single-player reveal.
+  // -------------------------------------------------------------------------
+
+  private stopMpTicking(): void {
+    if (this.mpTickTimer !== null) {
+      clearInterval(this.mpTickTimer);
+      this.mpTickTimer = null;
+    }
+  }
+
+  /** Animate the counter from 0 up to `target`, then stop. */
+  private startMpTicking(target: number): void {
+    this.stopMpTicking();
+    this.mpTickCounter = 0;
+    this.paintMpCounter();
+    if (this.reducedMotion) {
+      // Respect prefers-reduced-motion: jump straight to the final value.
+      this.mpTickCounter = target;
+      this.paintMpCounter();
+      return;
+    }
+    this.mpTickTimer = setInterval(() => {
+      if (!this.root.isConnected || this.mpTickCounter >= target) {
+        this.mpTickCounter = Math.min(this.mpTickCounter, target);
+        this.stopMpTicking();
+        return;
+      }
+      this.mpTickCounter += 1;
+      this.paintMpCounter();
+    }, TICK_MS);
+  }
+
+  /** Repaint only the counter bars/readout, without rebuilding the view. */
+  private paintMpCounter(): void {
+    const col = this.root.querySelector(".lb-bars");
+    const num = this.root.querySelector(".lb-score-num");
+    if (col !== null) {
+      col.querySelectorAll(".lb-bar").forEach((bar, i) => {
+        bar.classList.toggle("lb-bar-on", isBarLit(i, this.mpTickCounter));
+      });
+    }
+    if (num !== null) num.textContent = String(this.mpTickCounter);
   }
 
   // -------------------------------------------------------------------------
@@ -796,6 +879,8 @@ class Lowball implements GameInstance {
       spBtn.type = "button";
       spBtn.addEventListener("click", () => {
         this.mpClient?.close();
+        this.stopMpCountdown();
+        this.stopMpTicking();
         this.mpState = freshMpState();
         this.startDaily();
         this.render();
@@ -929,8 +1014,7 @@ class Lowball implements GameInstance {
     this.root.append(el("p", { class: "lb-rule", text: `${sweepLabel} · Lowest total wins` }));
 
     // REQ-043: countdown with aria-live (updated by startMpCountdown)
-    const secsLeft = Math.max(0, Math.ceil((s.deadlineTs - Date.now()) / 1000));
-    const countdown = el("p", { class: "lb-mp-countdown", text: `${secsLeft}s` });
+    const countdown = el("p", { class: "lb-mp-countdown", text: `${this.mpSecondsLeft()}s` });
     countdown.setAttribute("aria-live", "off"); // programmatic announcements at 10s/5s only
     countdown.setAttribute("aria-label", "Time remaining for this sweep");
     this.root.append(countdown);
@@ -940,6 +1024,29 @@ class Lowball implements GameInstance {
       err.setAttribute("role", "alert");
       this.root.append(err);
     }
+
+    // --- tension counter (REQ-051) --------------------------------------------
+    // Present in multiplayer too, so the panel-score reveal reads the same as
+    // single-player. Driven by mpTickCounter, which animates up to this player's
+    // own revealed score for the current sweep.
+    const myReveal = s.submissions.get(s.mySlotIndex);
+    const counter = el("div", { class: "lb-counter" });
+    const bars = el("div", { class: "lb-bars" });
+    bars.setAttribute("aria-hidden", "true"); // numeric text is the accessible channel
+    for (let i = 0; i < MAX_PANEL_SCORE; i++) {
+      const bar = el("span", { class: "lb-bar" });
+      if (isBarLit(i, this.mpTickCounter)) bar.classList.add("lb-bar-on");
+      bars.append(bar);
+    }
+    const readout = el("div", { class: "lb-readout" });
+    readout.append(
+      el("strong", { class: "lb-score-num", text: String(myReveal === undefined ? 0 : this.mpTickCounter) }),
+      el("span", { class: "lb-score-of", text: " / 100" }),
+    );
+    counter.append(bars, readout);
+    this.root.append(counter);
+    // REQ-053: never imply real people were surveyed.
+    this.root.append(el("p", { class: "lb-disclosure", text: PANEL_DISCLOSURE }));
 
     // 2×2 player grid (REQ-016 live reveals)
     const grid = el("div", { class: "lb-mp-grid" });
@@ -1073,6 +1180,8 @@ class Lowball implements GameInstance {
     soloBtn.type = "button";
     soloBtn.addEventListener("click", () => {
       this.mpClient?.close();
+      this.stopMpCountdown();
+      this.stopMpTicking();
       this.mpState = freshMpState();
       this.startDaily();
       this.render();
