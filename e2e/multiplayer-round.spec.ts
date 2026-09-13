@@ -291,8 +291,10 @@ test.describe("Multiplayer round — tension counter and countdown", () => {
     const guestPage = await guestJoin(context, inviteUrl, "Bob");
     await startRound(page, guestPage);
 
-    // Must never show a stale value from a previous sweep, and never exceed the
-    // 30s deadline. Sampled straight after render, before the first interval tick.
+    // Before the first sweep-start frame lands the countdown shows an em dash
+    // (no deadline known yet); once it lands it must be a sane 1..30s and never
+    // a stale value carried over from a previous sweep.
+    await expect(page.locator(".lb-mp-countdown")).toHaveText(/^\d+s$/, { timeout: 10_000 });
     const txt = await page.locator(".lb-mp-countdown").textContent();
     const secs = Number((txt ?? "").replace(/[^0-9]/g, ""));
     expect(secs).toBeGreaterThan(0);

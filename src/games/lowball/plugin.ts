@@ -695,10 +695,19 @@ class Lowball implements GameInstance {
     return Math.max(0, Math.round((this.mpState.deadlineTs - Date.now()) / 1000));
   }
 
+  /**
+   * Countdown text. Before the first sweep-start frame arrives deadlineTs is 0,
+   * which would render a misleading "0s"; show an em dash until a real deadline
+   * is known.
+   */
+  private mpCountdownText(): string {
+    return this.mpState.deadlineTs === 0 ? "—" : `${this.mpSecondsLeft()}s`;
+  }
+
   /** Paint the countdown. Single source of truth for both render and tick. */
   private paintMpCountdown(): void {
     const cdEl = this.root.querySelector(".lb-mp-countdown");
-    if (cdEl !== null) cdEl.textContent = `${this.mpSecondsLeft()}s`;
+    if (cdEl !== null) cdEl.textContent = this.mpCountdownText();
   }
 
   private startMpCountdown(): void {
@@ -1014,7 +1023,7 @@ class Lowball implements GameInstance {
     this.root.append(el("p", { class: "lb-rule", text: `${sweepLabel} · Lowest total wins` }));
 
     // REQ-043: countdown with aria-live (updated by startMpCountdown)
-    const countdown = el("p", { class: "lb-mp-countdown", text: `${this.mpSecondsLeft()}s` });
+    const countdown = el("p", { class: "lb-mp-countdown", text: this.mpCountdownText() });
     countdown.setAttribute("aria-live", "off"); // programmatic announcements at 10s/5s only
     countdown.setAttribute("aria-label", "Time remaining for this sweep");
     this.root.append(countdown);
