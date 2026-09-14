@@ -18,8 +18,7 @@ import { MAX_PANEL_SCORE, SWEEPS_TOTAL, type Puzzle } from "../src/games/lowball
 // Flagship category, scores mirroring the real generated pack.
 const puzzle: Puzzle = {
   puzzleId: "puz-0000",
-  affixType: "suffix",
-  affixValue: "ugh",
+  rule: { kind: "suffix", value: "ugh" },
   categoryLabel: 'Words ending in "ugh"',
   parValue: 21,
   categoryDomain: "words",
@@ -107,8 +106,7 @@ describe("submitAnswer — scoring, REQ-006..010", () => {
   it("TEST-013: a prefix category rejects a non-matching word", () => {
     const prefixPuzzle: Puzzle = {
       ...puzzle,
-      affixType: "prefix",
-      affixValue: "pre",
+      rule: { kind: "prefix", value: "pre" },
       answers: [{ word: "prevent", panelScore: 40, isFindable: true }],
     };
     const out = submitAnswer(initAttempt(prefixPuzzle, "d"), prefixPuzzle, "postpone");

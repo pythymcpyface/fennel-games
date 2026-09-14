@@ -6,8 +6,7 @@ import type { Puzzle } from "../src/games/lowball/types.ts";
 
 const puzzle: Puzzle = {
   puzzleId: "puz-0000",
-  affixType: "suffix",
-  affixValue: "ugh",
+  rule: { kind: "suffix", value: "ugh" },
   categoryLabel: 'Words ending in "ugh"',
   parValue: 21,
   categoryDomain: "words",

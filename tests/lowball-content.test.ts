@@ -7,12 +7,10 @@ import {
   gateFailureReason,
   buildPuzzles,
   assertPuzzlesValid,
-  categoryLabel,
-  matchesAffix,
   type Candidate,
   type ScoredWord,
 } from "../src/games/lowball/content-build.ts";
-import { FINDABLE_MAX_TIER } from "../src/games/lowball/types.ts";
+import { FINDABLE_MAX_TIER, matchesRule, ruleLabel } from "../src/games/lowball/types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers to build gate fixtures. A passing candidate must satisfy all six
@@ -29,8 +27,7 @@ const w = (word: string, rank: number | null, tier: number): ScoredWord => ({ wo
  */
 function baseCandidate(): Candidate {
   return {
-    affixType: "suffix",
-    affixValue: "ugh",
+    rule: { kind: "suffix", value: "ugh" },
     words: [
       w("though", 100, 10), // ~100 trap
       w("enough", 200, 10),
@@ -113,22 +110,22 @@ describe("isFindable — TERM-010", () => {
   });
 });
 
-describe("matchesAffix / categoryLabel", () => {
+describe("matchesRule / ruleLabel", () => {
   it("matches a suffix category", () => {
-    expect(matchesAffix("though", "suffix", "ugh")).toBe(true);
-    expect(matchesAffix("table", "suffix", "ugh")).toBe(false);
+    expect(matchesRule("though", { kind: "suffix", value: "ugh" })).toBe(true);
+    expect(matchesRule("table", { kind: "suffix", value: "ugh" })).toBe(false);
   });
   it("matches a prefix category", () => {
-    expect(matchesAffix("prevent", "prefix", "pre")).toBe(true);
-    expect(matchesAffix("postpone", "prefix", "pre")).toBe(false);
+    expect(matchesRule("prevent", { kind: "prefix", value: "pre" })).toBe(true);
+    expect(matchesRule("postpone", { kind: "prefix", value: "pre" })).toBe(false);
   });
   it("rejects a word equal to the affix itself", () => {
-    expect(matchesAffix("ugh", "suffix", "ugh")).toBe(false);
-    expect(matchesAffix("pre", "prefix", "pre")).toBe(false);
+    expect(matchesRule("ugh", { kind: "suffix", value: "ugh" })).toBe(false);
+    expect(matchesRule("pre", { kind: "prefix", value: "pre" })).toBe(false);
   });
   it("labels categories readably", () => {
-    expect(categoryLabel("suffix", "ugh")).toBe('Words ending in "ugh"');
-    expect(categoryLabel("prefix", "pre")).toBe('Words starting with "pre"');
+    expect(ruleLabel({ kind: "suffix", value: "ugh" }, "words")).toBe('Words ending in "ugh"');
+    expect(ruleLabel({ kind: "prefix", value: "pre" }, "words")).toBe('Words starting with "pre"');
   });
 });
 
@@ -257,8 +254,7 @@ describe("gateFailureReason — REQ-031..035, REQ-042", () => {
     // score 0 while the ladder still holds 5+ non-zero answers across 4+ distinct
     // values. That needs more findable words than the base fixture carries.
     const c: Candidate = {
-      affixType: "suffix",
-      affixValue: "ugh",
+      rule: { kind: "suffix", value: "ugh" },
       words: [
         w("though", 100, 10), // 100 trap
         w("enough", 900, 10),
@@ -298,7 +294,7 @@ describe("buildPuzzles + assertPuzzlesValid", () => {
 
   it("numbers puzzle ids sequentially", () => {
     const a = baseCandidate();
-    const b: Candidate = { ...baseCandidate(), affixValue: "ough" };
+    const b: Candidate = { ...baseCandidate(), rule: { kind: "suffix", value: "ough" } };
     const puzzles = buildPuzzles([a, b]);
     expect(puzzles.map((p) => p.puzzleId)).toEqual(["puz-0000", "puz-0001"]);
   });
@@ -315,12 +311,12 @@ describe("buildPuzzles + assertPuzzlesValid", () => {
     expect(() => assertPuzzlesValid(broken)).toThrow(/par/i);
   });
 
-  it("assertPuzzlesValid rejects an answer failing its own affix", () => {
+  it("assertPuzzlesValid rejects an answer failing its own rule", () => {
     const puzzles = buildPuzzles([baseCandidate()]);
     const broken = [
       { ...puzzles[0], answers: [...puzzles[0].answers, { word: "table", panelScore: 5, isFindable: true }] },
     ];
-    expect(() => assertPuzzlesValid(broken)).toThrow(/affix/i);
+    expect(() => assertPuzzlesValid(broken)).toThrow(/rule/i);
   });
 
   it("assertPuzzlesValid rejects a duplicate word within a puzzle", () => {

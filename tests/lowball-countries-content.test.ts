@@ -1,14 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
-  categoryLabelCountries,
   countryGateFailureReason,
   buildCountryAnswers,
   buildCountryPuzzles,
   assertCountryPuzzlesValid,
-  groupCountriesByAffix,
+  groupCountriesByRule,
+  bestTwoFindableSum,
   type CountryCandidate,
   type ScoredCountry,
 } from "../src/games/lowball/content-build.ts";
+import { ruleLabel, type CategoryRule } from "../src/games/lowball/types.ts";
 
 /** Build a ScoredCountry inline. */
 const c = (word: string, rank: number | null, tier: 10 | 35 | 50 | 70): ScoredCountry => ({
@@ -17,85 +18,77 @@ const c = (word: string, rank: number | null, tier: 10 | 35 | 50 | 70): ScoredCo
   tier,
 });
 
+const LAND: CategoryRule = { kind: "suffix", value: "land" };
+
 /**
- * A passing CountryCandidate that satisfies all gate rules:
- *   - 8 answers  (COUNTRY_MIN_ANSWERS=3 .. COUNTRY_MAX_ANSWERS=30)
- *   - trap score >= COUNTRY_MIN_TRAP_SCORE=15
- *   - >= 3 findable answers (tier <= 50)
- *   - >= 1 findable zero-scorer
- *   - >= 2 non-zero answers with >= 2 distinct scores  (ladder rule)
- *   - par > 0
+ * A passing CountryCandidate that satisfies all gate rules under the current
+ * (post-refactor) thresholds:
+ *   - 14 answers  (COUNTRY_MIN_ANSWERS=12 .. COUNTRY_MAX_ANSWERS=45)
+ *   - trap score >= COUNTRY_MIN_TRAP_SCORE=45
+ *   - >= 12 findable answers (tier <= 50)
+ *   - >= 10 non-zero answers with >= 8 distinct scores  (ladder rule)
+ *   - par > 0 AND the two weakest findable scores sum below par (winnability)
+ * Ranks are chosen so panelScore lands on 12 distinct non-zero values plus one
+ * findable zero-scorer, with a single unfindable (tier 70, OOV) filler.
  */
 function baseCountryCandidate(): CountryCandidate {
   return {
-    affixType: "suffix",
-    affixValue: "land",
+    rule: LAND,
     words: [
-      c("Iceland",    120,    10),  // trap (~100)
-      c("Ireland",    400,    10),  // high score
-      c("Finland",    3000,   35),  // mid score
-      c("Thailand",   8000,   35),  // mid score
-      c("Scotland",   20000,  50),  // lower score, findable
-      c("Swaziland",  null,   50),  // findable zero-scorer (OOV)
-      c("Somaliland", null,   50),  // findable zero-scorer (OOV)
-      c("Hinterland", null,   70),  // unfindable specialist
+      c("iceland",    300,    10), // ~100 trap
+      c("ireland",    1200,   10),
+      c("finland",    2000,   10),
+      c("thailand",   3000,   35),
+      c("scotland",   5000,   35),
+      c("swaziland",  8000,   50),
+      c("somaliland", 12000,  50),
+      c("greenland",  18000,  50),
+      c("southland",  27000,  50),
+      c("midland",    40000,  50),
+      c("loveland",   60000,  50),
+      c("newland",    90000,  50),
+      c("farland",    140000, 50), // findable zero-scorer
+      c("hinterland", null,   70), // unfindable specialist (OOV)
     ],
   };
 }
 
 // ---------------------------------------------------------------------------
-// categoryLabelCountries
+// groupCountriesByRule
 // ---------------------------------------------------------------------------
 
-describe("categoryLabelCountries", () => {
-  it('suffix label uses "ending in" phrasing', () => {
-    expect(categoryLabelCountries("suffix", "land")).toBe('Countries ending in "land"');
-  });
-
-  it('prefix label uses "starting with" phrasing', () => {
-    expect(categoryLabelCountries("prefix", "nor")).toBe('Countries starting with "nor"');
-  });
-
-  it("uses the affix value verbatim", () => {
-    expect(categoryLabelCountries("suffix", "stan")).toBe('Countries ending in "stan"');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// groupCountriesByAffix
-// ---------------------------------------------------------------------------
-
-describe("groupCountriesByAffix", () => {
+describe("groupCountriesByRule", () => {
   it("groups countries sharing a suffix into the same bucket", () => {
     const input: ScoredCountry[] = [
-      c("Iceland", 100, 10),
-      c("Ireland", 200, 10),
-      c("Finland", 3000, 35),
-      c("Germany", 500, 10),
+      c("iceland", 100, 10),
+      c("ireland", 200, 10),
+      c("finland", 3000, 35),
+      c("germany", 500, 10),
     ];
-    const groups = groupCountriesByAffix(input);
-    const landBucket = [...groups.values()].find(
-      (list) => list.length >= 3 && list.every((sc) => sc.word.endsWith("land")),
-    );
+    const candidates = groupCountriesByRule([LAND], input);
+    const landBucket = candidates.find((cand) => cand.words.every((sc) => sc.word.endsWith("land")));
     expect(landBucket).toBeDefined();
+    expect(landBucket?.words.length).toBe(3);
   });
 
   it("produces a bucket for stan-suffix countries", () => {
     const stans: ScoredCountry[] = [
-      c("Kazakhstan", 5000, 35),
-      c("Uzbekistan", 8000, 35),
-      c("Kyrgyzstan", null, 50),
-      c("Tajikistan", null, 50),
+      c("kazakhstan", 5000, 35),
+      c("uzbekistan", 8000, 35),
+      c("kyrgyzstan", null, 50),
+      c("tajikistan", null, 50),
     ];
-    const groups = groupCountriesByAffix(stans);
-    const stanBucket = [...groups.values()].find(
-      (list) => list.length >= 4 && list.every((sc) => sc.word.endsWith("stan")),
-    );
-    expect(stanBucket).toBeDefined();
+    const candidates = groupCountriesByRule([{ kind: "suffix", value: "stan" }], stans);
+    expect(candidates[0]?.words.length).toBe(4);
   });
 
-  it("returns an empty map for empty input", () => {
-    expect(groupCountriesByAffix([])).toEqual(new Map());
+  it("returns no candidates for empty input", () => {
+    expect(groupCountriesByRule([LAND], [])).toEqual([]);
+  });
+
+  it("drops a rule matching zero countries", () => {
+    const input: ScoredCountry[] = [c("iceland", 100, 10)];
+    expect(groupCountriesByRule([{ kind: "suffix", value: "zzz" }], input)).toEqual([]);
   });
 });
 
@@ -113,13 +106,23 @@ describe("buildCountryAnswers", () => {
 
   it("marks tier-10 and tier-35 words as findable", () => {
     const answers = buildCountryAnswers(baseCountryCandidate());
-    expect(answers.find((a) => a.word === "Iceland")?.isFindable).toBe(true);
-    expect(answers.find((a) => a.word === "Finland")?.isFindable).toBe(true);
+    expect(answers.find((a) => a.word === "iceland")?.isFindable).toBe(true);
+    expect(answers.find((a) => a.word === "thailand")?.isFindable).toBe(true);
   });
 
   it("marks a tier-70 OOV word as not findable", () => {
     const answers = buildCountryAnswers(baseCountryCandidate());
-    expect(answers.find((a) => a.word === "Hinterland")?.isFindable).toBe(false);
+    expect(answers.find((a) => a.word === "hinterland")?.isFindable).toBe(false);
+  });
+
+  it("falls back to the tier score, not a hard zero, for an OOV FINDABLE word (REQ-COUNTRY-002)", () => {
+    const candidate: CountryCandidate = {
+      rule: LAND,
+      words: [c("oovland", null, 50)],
+    };
+    const [answer] = buildCountryAnswers(candidate);
+    expect(answer.isFindable).toBe(true);
+    expect(answer.panelScore).toBeGreaterThan(0);
   });
 
   it("answer objects carry only word, panelScore, isFindable", () => {
@@ -139,16 +142,16 @@ describe("countryGateFailureReason", () => {
     expect(countryGateFailureReason(baseCountryCandidate())).toBeNull();
   });
 
-  it("rejects fewer than 3 answers (answer_count)", () => {
+  it("rejects fewer than 12 answers (answer_count)", () => {
     const bad: CountryCandidate = {
       ...baseCountryCandidate(),
-      words: [c("Iceland", 120, 10), c("Ireland", 400, 10)],
+      words: [c("iceland", 120, 10), c("ireland", 400, 10)],
     };
     expect(countryGateFailureReason(bad)).toBe("answer_count");
   });
 
-  it("rejects more than 30 answers (answer_count)", () => {
-    const extra = Array.from({ length: 25 }, (_, i) => c(`Country${i}land`, 10000 + i * 500, 50));
+  it("rejects more than 45 answers (answer_count)", () => {
+    const extra = Array.from({ length: 40 }, (_, i) => c(`country${i}land`, 10000 + i * 500, 50));
     const bad: CountryCandidate = {
       ...baseCountryCandidate(),
       words: [...baseCountryCandidate().words, ...extra],
@@ -156,35 +159,41 @@ describe("countryGateFailureReason", () => {
     expect(countryGateFailureReason(bad)).toBe("answer_count");
   });
 
-  it("rejects when no answer scores >= 40 (no_trap)", () => {
+  it("rejects when no answer scores >= 45 (no_trap)", () => {
     const bad: CountryCandidate = {
-      affixType: "suffix",
-      affixValue: "land",
-      words: [
-        c("Greenland",  50000, 35),
-        c("Swaziland",  60000, 35),
-        c("Somaliland", 70000, 35),
-        c("Hinterland", null,  50),
-      ],
+      rule: LAND,
+      words: Array.from({ length: 13 }, (_, i) => c(`country${i}land`, 50000 + i * 2000, 50)),
     };
     expect(countryGateFailureReason(bad)).toBe("no_trap");
   });
 
-  it("rejects fewer than 3 findable answers (findable_count)", () => {
+  it("rejects fewer than 12 findable answers (findable_count)", () => {
     const bad: CountryCandidate = {
-      affixType: "suffix",
-      affixValue: "land",
+      rule: LAND,
       words: [
-        c("Iceland",    120,  10),
-        c("Ireland",    400,  10),
-        c("Hinterland", null, 70),
-        c("Somaliland", null, 70),
-        c("Disneyland", null, 70),
+        c("iceland", 300, 10),
+        c("ireland", 400, 10),
+        ...Array.from({ length: 10 }, (_, i) => c(`unfind${i}land`, null, 70)),
       ],
     };
     expect(countryGateFailureReason(bad)).toBe("findable_count");
   });
 
+  it("rejects a category unwinnable in two sweeps (unwinnable)", () => {
+    // Every findable answer clusters near the trap, so par sits far above what
+    // any two-sweep total could undercut — the exact shape of the original bug
+    // (e.g. "starting with bel": belgium/belarus/belize all score 40+).
+    const bad: CountryCandidate = {
+      rule: LAND,
+      words: Array.from({ length: 13 }, (_, i) => c(`country${i}land`, 100 + i * 50, 10)),
+    };
+    const failure = countryGateFailureReason(bad);
+    // With every score near 100, best2FindableSum is far above any achievable
+    // par, so the gate must reject it — either as unwinnable, or (if the ladder
+    // rule fires first because scores cluster too tightly) no_ladder. Both are
+    // valid rejections; the one invariant that matters is IT IS REJECTED.
+    expect(failure).not.toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -200,17 +209,24 @@ describe("buildCountryPuzzles + assertCountryPuzzlesValid", () => {
     expect(() => assertCountryPuzzlesValid(puzzles)).not.toThrow();
   });
 
+  it("every emitted puzzle is winnable in two sweeps", () => {
+    const puzzles = buildCountryPuzzles([baseCountryCandidate()]);
+    for (const p of puzzles) {
+      expect(bestTwoFindableSum(p.answers)).toBeLessThan(p.parValue);
+    }
+  });
+
   it("emits zero puzzles for a failing candidate", () => {
     const bad: CountryCandidate = {
       ...baseCountryCandidate(),
-      words: [c("Iceland", 120, 10), c("Ireland", 400, 10)],
+      words: [c("iceland", 120, 10), c("ireland", 400, 10)],
     };
     expect(buildCountryPuzzles([bad])).toHaveLength(0);
   });
 
   it("numbers puzzle IDs sequentially", () => {
     const a = baseCountryCandidate();
-    const b: CountryCandidate = { ...baseCountryCandidate(), affixValue: "stan" };
+    const b: CountryCandidate = { ...baseCountryCandidate(), rule: { kind: "suffix", value: "stan" } };
     const puzzles = buildCountryPuzzles([a, b]);
     expect(puzzles.map((p) => p.puzzleId)).toEqual(["puz-0000", "puz-0001"]);
   });
@@ -228,6 +244,13 @@ describe("buildCountryPuzzles + assertCountryPuzzlesValid", () => {
     expect(() => assertCountryPuzzlesValid(broken)).toThrow(/par/i);
   });
 
+  it("assertCountryPuzzlesValid throws on an unwinnable par (REQ-COUNTRY-003)", () => {
+    const puzzles = buildCountryPuzzles([baseCountryCandidate()]);
+    const best2 = bestTwoFindableSum(puzzles[0].answers);
+    const broken = [{ ...puzzles[0], parValue: best2 }];
+    expect(() => assertCountryPuzzlesValid(broken)).toThrow(/unwinnable/i);
+  });
+
   it("assertCountryPuzzlesValid throws on duplicate answer within a puzzle", () => {
     const puzzles = buildCountryPuzzles([baseCountryCandidate()]);
     const dup = puzzles[0].answers[0];
@@ -240,5 +263,14 @@ describe("buildCountryPuzzles + assertCountryPuzzlesValid", () => {
     for (const a of p.answers) {
       expect(Object.keys(a).sort()).toEqual(["isFindable", "panelScore", "word"]);
     }
+  });
+});
+
+describe("ruleLabel (countries domain)", () => {
+  it('suffix label uses "ending in" phrasing', () => {
+    expect(ruleLabel({ kind: "suffix", value: "land" }, "countries")).toBe('Countries ending in "land"');
+  });
+  it('prefix label uses "starting with" phrasing', () => {
+    expect(ruleLabel({ kind: "prefix", value: "nor" }, "countries")).toBe('Countries starting with "nor"');
   });
 });

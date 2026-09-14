@@ -24,14 +24,13 @@ import {
   groupWordsByAffix,
   isBlockedWord,
   isSafeAffix,
-  matchesAffix,
   MIN_ANSWERS,
   MAX_ANSWERS,
   type Candidate,
   type GateFailure,
   type ScoredWord,
 } from "../src/games/lowball/content-build.ts";
-import type { AffixType } from "../src/games/lowball/types.ts";
+import { matchesRule, type CategoryRule } from "../src/games/lowball/types.ts";
 
 const PACK_VERSION = "1.1.0";
 const TARGET_PUZZLES = 120;
@@ -108,13 +107,14 @@ async function main(): Promise<void> {
   const candidates: Candidate[] = [];
   const rejections = new Map<GateFailure, number>();
   for (const [key, list] of viable) {
-    const [type, value] = key.split(":") as [AffixType, string];
+    const [type, value] = key.split(":") as ["prefix" | "suffix", string];
     const scored: ScoredWord[] = [...list].sort().map((w) => ({
       word: w,
       rank: ranks.get(w) ?? null,
       tier: tierOf.get(w) ?? 70,
     }));
-    const candidate: Candidate = { affixType: type, affixValue: value, words: scored };
+    const rule: CategoryRule = { kind: type, value };
+    const candidate: Candidate = { rule, words: scored };
     const failure = gateFailureReason(candidate);
     if (failure !== null) {
       rejections.set(failure, (rejections.get(failure) ?? 0) + 1);
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     process.stdout.write(`  rejected ${String(n).padStart(5)} — ${reason}\n`);
   }
 
-  // Deterministic ordering. Sorting by a hash of the affix rather than
+  // Deterministic ordering. Sorting by a hash of the rule rather than
   // alphabetically spreads the selected categories across the alphabet and across
   // both affix types: a plain lexical sort would ship 120 categories all beginning
   // "ab..."/"ac...", which reads as broken variety even though each is individually
@@ -138,14 +138,29 @@ async function main(): Promise<void> {
   // allows. Left unweighted the pack skews ~76% prefix simply because more prefix
   // groups fall in the size band, and prefix categories play worse: "words starting
   // with abu" is a weaker prompt than "words ending in ugh".
+  const isPrefixOrSuffix = (r: CategoryRule): r is { kind: "prefix" | "suffix"; value: string } =>
+    r.kind === "prefix" || r.kind === "suffix";
+  // Hash input reproduces the pre-refactor format verbatim (`lowball|<type>|<value>`,
+  // pipe-separated in three parts) so regenerating the pack after this refactor
+  // selects the SAME 120 categories rather than reshuffling the daily rotation as
+  // a side effect of a type change alone.
+  const ruleHashInput = (r: CategoryRule): string =>
+    isPrefixOrSuffix(r) ? `${r.kind}|${r.value}` : JSON.stringify(r);
+  const ruleKey = (r: CategoryRule): string =>
+    isPrefixOrSuffix(r) ? `${r.kind}:${r.value}` : JSON.stringify(r);
   const byHash = (a: Candidate, b: Candidate): number => {
-    const ha = fnv1a32(`lowball|${a.affixType}|${a.affixValue}`);
-    const hb = fnv1a32(`lowball|${b.affixType}|${b.affixValue}`);
-    return ha - hb || `${a.affixType}:${a.affixValue}`.localeCompare(`${b.affixType}:${b.affixValue}`);
+    const ha = fnv1a32(`lowball|${ruleHashInput(a.rule)}`);
+    const hb = fnv1a32(`lowball|${ruleHashInput(b.rule)}`);
+    return ha - hb || ruleKey(a.rule).localeCompare(ruleKey(b.rule));
   };
-  const isFlagship = (c: Candidate): boolean => c.affixType === "suffix" && c.affixValue === "ugh";
-  const suffixes = candidates.filter((c) => c.affixType === "suffix" && !isFlagship(c)).sort(byHash);
-  const prefixes = candidates.filter((c) => c.affixType === "prefix").sort(byHash);
+  const isFlagship = (c: Candidate): boolean =>
+    isPrefixOrSuffix(c.rule) && c.rule.kind === "suffix" && c.rule.value === "ugh";
+  const suffixes = candidates
+    .filter((c) => isPrefixOrSuffix(c.rule) && c.rule.kind === "suffix" && !isFlagship(c))
+    .sort(byHash);
+  const prefixes = candidates
+    .filter((c) => isPrefixOrSuffix(c.rule) && c.rule.kind === "prefix")
+    .sort(byHash);
 
   // The "ugh" category anchors the pack: it is the archetypal Lowball prompt, with
   // `ugh`-family words as findable zero-scorers against four 100-scoring traps.
@@ -170,7 +185,7 @@ async function main(): Promise<void> {
   assertPuzzlesValid(puzzles);
 
   // --- agreement proof (REQ-006, REQ-007) ------------------------------------
-  // The permanent guard against this bug class. Sharing `matchesAffix` prevents
+  // The permanent guard against this bug class. Sharing `matchesRule` prevents
   // TODAY's divergence; this proves it for every future regeneration, and fails the
   // build before a bad pack can be written.
   const soundness: string[] = [];
@@ -179,8 +194,8 @@ async function main(): Promise<void> {
     const shipped = new Set(p.answers.map((a) => a.word));
     for (const a of p.answers) {
       // SOUNDNESS: never ship an answer the engine would reject, or one that is unsafe.
-      if (!matchesAffix(a.word, p.affixType, p.affixValue)) {
-        soundness.push(`${p.puzzleId} (${p.affixType}:${p.affixValue}) ships "${a.word}" which matchesAffix rejects`);
+      if (!matchesRule(a.word, p.rule)) {
+        soundness.push(`${p.puzzleId} (${JSON.stringify(p.rule)}) ships "${a.word}" which matchesRule rejects`);
       }
       if (isBlockedWord(a.word)) {
         soundness.push(`${p.puzzleId} ships blocked word "${a.word}"`);
@@ -190,8 +205,8 @@ async function main(): Promise<void> {
     // the direction the original bug failed in — "grape" was accepted by the runtime
     // rule but absent from the pack.
     for (const w of words) {
-      if (matchesAffix(w, p.affixType, p.affixValue) && !shipped.has(w)) {
-        completeness.push(`${p.puzzleId} (${p.affixType}:${p.affixValue}) omits valid word "${w}"`);
+      if (matchesRule(w, p.rule) && !shipped.has(w)) {
+        completeness.push(`${p.puzzleId} (${JSON.stringify(p.rule)}) omits valid word "${w}"`);
       }
     }
   }
@@ -241,7 +256,7 @@ async function main(): Promise<void> {
   }
 
   // Show the flagship category in full if the gate admitted it.
-  const anchor = puzzles.find((p) => p.affixType === "suffix" && p.affixValue === "ugh");
+  const anchor = puzzles.find((p) => p.rule.kind === "suffix" && (p.rule as { value: string }).value === "ugh");
   if (anchor !== undefined) {
     process.stdout.write(`\n  flagship ${anchor.categoryLabel} (par ${anchor.parValue}):\n    `);
     process.stdout.write(

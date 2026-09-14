@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
-import { assertCountryPuzzlesValid } from "../src/games/lowball/content-build.ts";
-import { matchesAffix } from "../src/games/lowball/types.ts";
+import { assertCountryPuzzlesValid, bestTwoFindableSum, COUNTRY_MIN_FINDABLE } from "../src/games/lowball/content-build.ts";
+import { matchesRule } from "../src/games/lowball/types.ts";
 import type { Puzzle } from "../src/games/lowball/types.ts";
 
 // Integration test for the generated public/lowball-countries.json pack.
@@ -47,16 +47,29 @@ describeWithPack("lowball-countries.json — structural soundness", () => {
     }
   });
 
-  it("every answer satisfies matchesAffix for its puzzle", () => {
+  it("every answer satisfies matchesRule for its puzzle", () => {
     const violations: string[] = [];
     for (const p of pack.puzzles) {
       for (const a of p.answers) {
-        if (!matchesAffix(a.word, p.affixType, p.affixValue)) {
-          violations.push(`${p.puzzleId} ${p.affixType}:${p.affixValue} -> ${a.word}`);
+        if (!matchesRule(a.word, p.rule)) {
+          violations.push(`${p.puzzleId} ${JSON.stringify(p.rule)} -> ${a.word}`);
         }
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("every puzzle is winnable in two sweeps (regression: par-vs-two-sweeps bug)", () => {
+    for (const p of pack.puzzles) {
+      expect(bestTwoFindableSum(p.answers)).toBeLessThan(p.parValue);
+    }
+  });
+
+  it("every puzzle has enough findable supply for a full 4-player room (regression: supply-starvation bug)", () => {
+    for (const p of pack.puzzles) {
+      const findable = p.answers.filter((a) => a.isFindable).length;
+      expect(findable).toBeGreaterThanOrEqual(COUNTRY_MIN_FINDABLE);
+    }
   });
 
   it("puzzle IDs are sequential and unique", () => {

@@ -2,7 +2,7 @@ import type { GamePlugin, GameServices, GameInstance, DailyResult } from "../../
 import { canonicalizeDayId } from "../../kit/selection.ts";
 import { loadStats, saveStats, recordPlayed, recordWon, type Stats } from "../../kit/stats.ts";
 import { saveAttempt, loadAttempt } from "../../kit/persistence.ts";
-import type { AttemptState, InvalidReason, Puzzle, RoundMode } from "./types.ts";
+import type { AttemptState, CategoryRule, InvalidReason, Puzzle, RoundMode } from "./types.ts";
 import { MAX_PANEL_SCORE, PANEL_DISCLOSURE, PANEL_DISCLOSURE_COUNTRIES, SWEEPS_TOTAL } from "./types.ts";
 import {
   initAttempt,
@@ -76,8 +76,7 @@ interface MpState {
   // puzzle info
   categoryLabel: string;
   parValue: number;
-  affixType: string;
-  affixValue: string;
+  rule: CategoryRule;
   // leaderboard
   leaderboard: MpLeaderboardEntry[] | null;
   // error / status message
@@ -100,8 +99,7 @@ function freshMpState(): MpState {
     tiedSlots: [],
     categoryLabel: "",
     parValue: 0,
-    affixType: "suffix",
-    affixValue: "",
+    rule: { kind: "suffix", value: "" },
     leaderboard: null,
     errorMsg: "",
   };
@@ -610,8 +608,7 @@ class Lowball implements GameInstance {
           phase: "round-active",
           categoryLabel: event.categoryLabel,
           parValue: event.parValue,
-          affixType: event.affixType,
-          affixValue: event.affixValue,
+          rule: event.rule,
         };
         this.renderLiveRound();
         break;

@@ -7,7 +7,7 @@ import { derivePuzzleId, fnv1a32 } from "../../kit/selection.ts";
 import {
   MAX_PANEL_SCORE,
   SWEEPS_TOTAL,
-  matchesAffix,
+  matchesRule,
   type Answer,
   type AttemptState,
   type PlayerState,
@@ -103,7 +103,7 @@ export function submitAnswer(
     invalidReason = "empty";
   } else if (alreadyGiven) {
     invalidReason = "duplicate";
-  } else if (!matchesAffix(word, puzzle.affixType, puzzle.affixValue)) {
+  } else if (!matchesRule(word, puzzle.rule)) {
     invalidReason = "affix_mismatch";
   } else {
     const answer = lookupAnswer(puzzle, word);

@@ -11,6 +11,7 @@
 // - Emitting typed ClientEvents to the plugin so plugin.ts stays WebSocket-free
 
 import type { ServerMessage, ClientMessage } from "./mp-types.ts";
+import type { CategoryRule } from "./types.ts";
 
 // Re-export wire types the plugin and share module need.
 export type { ServerMessage, ClientMessage };
@@ -108,7 +109,7 @@ export type ClientEvent =
   | { kind: "open" }
   | { kind: "joined"; slotIndex: number; displayName: string; isHost: boolean }
   | { kind: "player-list"; players: { slotIndex: number; displayName: string; isHost: boolean }[]; count: number }
-  | { kind: "start"; categoryLabel: string; parValue: number; affixType: string; affixValue: string }
+  | { kind: "start"; categoryLabel: string; parValue: number; rule: CategoryRule }
   | { kind: "sweep-start"; sweepIndex: number; deadlineTs: number; activeSlot: number }
   | { kind: "tiebreak-start"; round: number; tiedSlots: number[]; deadlineTs: number; activeSlot: number }
   | { kind: "reveal"; slotIndex: number; displayName: string; word: string | null; score: number; verdict: string; runningTotal: number }
@@ -198,8 +199,7 @@ export class MultiplayerClient {
           kind: "start",
           categoryLabel: msg.categoryLabel,
           parValue: msg.parValue,
-          affixType: msg.affixType,
-          affixValue: msg.affixValue,
+          rule: msg.rule,
         });
         break;
 

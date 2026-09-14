@@ -9,7 +9,7 @@ import {
 } from "../../../src/games/lowball/engine.ts";
 import {
   MAX_PANEL_SCORE,
-  matchesAffix,
+  matchesRule,
   type Puzzle,
 } from "../../../src/games/lowball/types.ts";
 import type {
@@ -72,7 +72,7 @@ export function scoreSubmission(
   }
 
   // Affix mismatch
-  if (!matchesAffix(word, puzzle.affixType, puzzle.affixValue)) {
+  if (!matchesRule(word, puzzle.rule)) {
     return { submittedWord: word, panelScore: MAX_PANEL_SCORE, verdict: "INVALID" };
   }
 

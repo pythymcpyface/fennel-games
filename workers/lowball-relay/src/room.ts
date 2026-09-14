@@ -470,8 +470,7 @@ export class LowballRelayDO implements DurableObject {
       puzzleId: p.puzzleId,
       categoryLabel: p.categoryLabel,
       parValue: p.parValue,
-      affixType: p.affixType,
-      affixValue: p.affixValue,
+      rule: p.rule,
     });
 
     // TURN-BASED: hand the first turn to the lowest connected slot with its own

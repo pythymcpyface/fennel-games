@@ -54,21 +54,140 @@ export const MAX_PANEL_SCORE = 100;
  */
 export const FINDABLE_MAX_TIER = 50;
 
-/** Which end of the word the category pattern pins. */
-export type AffixType = "suffix" | "prefix";
+/**
+ * A category's admission test, as data rather than a hardcoded prefix/suffix pair.
+ * Each variant is one fact about a word that the fairness gate can verify has
+ * enough supply and enough of a scoring ladder. `all` combines two rules with AND,
+ * used for narrower categories (e.g. "starts with a consonant AND 8+ letters").
+ *
+ * `prefix`/`suffix`/`contains` subsume what used to be the fixed AffixType/
+ * affixValue pair; the affix alone never counts (a category of "ugh" does not
+ * accept the bare word "ugh").
+ */
+export type CategoryRule =
+  | { kind: "prefix" | "suffix" | "contains"; value: string }
+  | { kind: "startsLetter" | "endsLetter" | "containsLetter" | "lacksLetter"; letter: string }
+  | { kind: "letterAtLeast"; letter: string; n: number }
+  | { kind: "lengthEq" | "lengthGte" | "lengthLte"; n: number }
+  | { kind: "vowelCountGte" | "vowelCountLte"; n: number }
+  | { kind: "startsVowel" | "startsConsonant" | "sameFirstLast" | "tripleConsonant" }
+  | { kind: "all"; rules: CategoryRule[] };
+
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+
+/** How many vowels (a/e/i/o/u) a normalised word contains. */
+function vowelCount(word: string): number {
+  let n = 0;
+  for (const ch of word) if (VOWELS.has(ch)) n++;
+  return n;
+}
 
 /**
- * Does this word fit the category pattern? The affix alone never counts, so a
- * category of "ugh" does not accept the bare word "ugh".
+ * Does this word satisfy a single (non-`all`) rule?
  *
  * Lives here, in the dependency-free types module, so build-time admission
  * (`assertPuzzlesValid`) and run-time validation (`submitAnswer`) share one
  * implementation. Duplicating it risked a future rule change applying to only one
  * side, which would let the pack admit answers the engine then rejects.
  */
-export function matchesAffix(word: string, affixType: AffixType, affixValue: string): boolean {
-  if (word.length <= affixValue.length) return false;
-  return affixType === "suffix" ? word.endsWith(affixValue) : word.startsWith(affixValue);
+function matchesSingleRule(word: string, rule: Exclude<CategoryRule, { kind: "all" }>): boolean {
+  switch (rule.kind) {
+    case "prefix":
+      return word.length > rule.value.length && word.startsWith(rule.value);
+    case "suffix":
+      return word.length > rule.value.length && word.endsWith(rule.value);
+    case "contains":
+      return word.length > rule.value.length && word.includes(rule.value);
+    case "startsLetter":
+      return word.startsWith(rule.letter);
+    case "endsLetter":
+      return word.endsWith(rule.letter);
+    case "containsLetter":
+      return word.includes(rule.letter);
+    case "lacksLetter":
+      return !word.includes(rule.letter);
+    case "letterAtLeast": {
+      let n = 0;
+      for (const ch of word) if (ch === rule.letter) n++;
+      return n >= rule.n;
+    }
+    case "lengthEq":
+      return word.length === rule.n;
+    case "lengthGte":
+      return word.length >= rule.n;
+    case "lengthLte":
+      return word.length <= rule.n;
+    case "vowelCountGte":
+      return vowelCount(word) >= rule.n;
+    case "vowelCountLte":
+      return vowelCount(word) <= rule.n;
+    case "startsVowel":
+      return VOWELS.has(word[0] ?? "");
+    case "startsConsonant":
+      return word.length > 0 && !VOWELS.has(word[0] ?? "");
+    case "sameFirstLast":
+      return word.length > 0 && word[0] === word[word.length - 1];
+    case "tripleConsonant":
+      return /[^aeiou]{3}/.test(word);
+  }
+}
+
+/** Does this word fit the category rule? */
+export function matchesRule(word: string, rule: CategoryRule): boolean {
+  if (rule.kind === "all") return rule.rules.every((r) => matchesRule(word, r));
+  return matchesSingleRule(word, rule);
+}
+
+/**
+ * Human-readable prompt fragment for a single (non-`all`) rule, e.g. `ending in
+ * "ugh"` or `with 8 or more letters`. Composed by `ruleLabel` into a full prompt.
+ */
+function singleRuleFragment(rule: Exclude<CategoryRule, { kind: "all" }>): string {
+  switch (rule.kind) {
+    case "prefix":
+      return `starting with "${rule.value}"`;
+    case "suffix":
+      return `ending in "${rule.value}"`;
+    case "contains":
+      return `containing "${rule.value}"`;
+    case "startsLetter":
+      return `starting with "${rule.letter}"`;
+    case "endsLetter":
+      return `ending in "${rule.letter}"`;
+    case "containsLetter":
+      return `containing "${rule.letter}"`;
+    case "lacksLetter":
+      return `with no "${rule.letter}"`;
+    case "letterAtLeast":
+      return `with "${rule.letter}" ${rule.n} or more times`;
+    case "lengthEq":
+      return `with exactly ${rule.n} letters`;
+    case "lengthGte":
+      return `with ${rule.n} or more letters`;
+    case "lengthLte":
+      return `with ${rule.n} letters or fewer`;
+    case "vowelCountGte":
+      return `with ${rule.n} or more vowels`;
+    case "vowelCountLte":
+      return `with ${rule.n} vowels or fewer`;
+    case "startsVowel":
+      return "starting with a vowel";
+    case "startsConsonant":
+      return "starting with a consonant";
+    case "sameFirstLast":
+      return "starting and ending with the same letter";
+    case "tripleConsonant":
+      return "with three consonants in a row";
+  }
+}
+
+/** Human-readable prompt for a category rule, e.g. `Words ending in "ugh"`. */
+export function ruleLabel(rule: CategoryRule, domain: CategoryDomain): string {
+  const subject = domain === "countries" ? "Countries" : "Words";
+  if (rule.kind === "all") {
+    return `${subject} ${rule.rules.map((r) => singleRuleFragment(r as Exclude<CategoryRule, { kind: "all" }>)).join(" and ")}`;
+  }
+  return `${subject} ${singleRuleFragment(rule)}`;
 }
 
 /** One admissible answer for a category, with its precomputed panel score. */
@@ -88,9 +207,8 @@ export interface Answer {
 /** A single day's category. */
 export interface Puzzle {
   puzzleId: string;
-  affixType: AffixType;
-  /** the pinned letters, e.g. "ugh" */
-  affixValue: string;
+  /** the admission test every answer must satisfy */
+  rule: CategoryRule;
   /** human-readable prompt, e.g. `Words ending in "ugh"` */
   categoryLabel: string;
   /**

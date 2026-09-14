@@ -1,6 +1,8 @@
 // Shared types for the Lowball multiplayer relay — used by room-logic.ts (pure)
 // and room.ts (DO class). No DOM, no Worker APIs.
 
+import type { CategoryRule } from "../../../src/games/lowball/types.ts";
+
 export type RoomPhase =
   | "lobby"
   | "sweep"
@@ -70,7 +72,7 @@ export interface LeaderboardEntry {
 export type ServerMessage =
   | { type: "joined"; slotIndex: number; displayName: string; isHost: boolean; players: PlayerInfo[] }
   | { type: "player-list"; players: PlayerInfo[]; roomPlayerCount: number }
-  | { type: "start"; puzzleId: string; categoryLabel: string; parValue: number; affixType: string; affixValue: string }
+  | { type: "start"; puzzleId: string; categoryLabel: string; parValue: number; rule: CategoryRule }
   | { type: "sweep-start"; sweepIndex: number; sweepDeadlineTimestamp: number; activeSlot: number }
   | { type: "tiebreak-start"; tiebreakRoundNumber: number; tiedSlots: number[]; sweepDeadlineTimestamp: number; activeSlot: number }
   | { type: "reveal"; reveal: SweepReveal }

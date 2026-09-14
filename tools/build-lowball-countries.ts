@@ -1,7 +1,8 @@
 // Lowball-Countries content build tool.
 // Reads the gitignored GloVe vector file, looks up frequency ranks for every
-// country name in COUNTRY_LIST, groups by 3/4-letter prefix/suffix, applies
-// the fairness gate, and writes public/lowball-countries.json.
+// country name in COUNTRIES, enumerates every viable category rule (letter
+// position, containment, length, vowel shape, substrings), applies the
+// fairness gate, and writes public/lowball-countries.json.
 
 import { writeFileSync, mkdirSync, existsSync, createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
@@ -10,19 +11,18 @@ import { dirname, join } from "node:path";
 import { fnv1a32 } from "../src/kit/selection.ts";
 import {
   COUNTRIES,
-  groupCountriesByAffix,
+  enumerateCountryRules,
+  groupCountriesByRule,
   buildCountryPuzzles,
   assertCountryPuzzlesValid,
   countryGateFailureReason,
-  COUNTRY_MIN_ANSWERS,
-  COUNTRY_MAX_ANSWERS,
   type CountryCandidate,
   type CountryGateFailure,
   type ScoredCountry,
 } from "../src/games/lowball/content-build.ts";
 
-const PACK_VERSION = "1.0.0";
-const MIN_PUZZLES = 1;
+const PACK_VERSION = "2.0.0";
+const MIN_PUZZLES = 30;
 const MAX_PACK_BYTES = 100 * 1024;
 
 async function loadGloveRanks(
@@ -56,7 +56,8 @@ async function main(): Promise<void> {
   const ranks = await loadGloveRanks(glovePath, needed);
   process.stdout.write(
     `lowball-countries: resolved ${ranks.size}/${needed.size} GloVe ranks ` +
-      `(${((100 * ranks.size) / Math.max(1, needed.size)).toFixed(1)}% in vocabulary)\n`,
+      `(${((100 * ranks.size) / Math.max(1, needed.size)).toFixed(1)}% in vocabulary). ` +
+      `Names absent from GloVe fall back to their editorial tier score, not zero.\n`,
   );
 
   const scored: ScoredCountry[] = COUNTRIES.map((c) => ({
@@ -65,23 +66,15 @@ async function main(): Promise<void> {
     tier: c.tier,
   }));
 
-  const groups = groupCountriesByAffix(scored);
-  const viable = [...groups.entries()].filter(
-    ([, list]) => list.length >= COUNTRY_MIN_ANSWERS && list.length <= COUNTRY_MAX_ANSWERS,
-  );
-
+  const rules = enumerateCountryRules(scored);
+  const grouped = groupCountriesByRule(rules, scored);
   process.stdout.write(
-    `lowball-countries: ${groups.size} affix groups, ${viable.length} in the ${COUNTRY_MIN_ANSWERS}..${COUNTRY_MAX_ANSWERS} band\n`,
+    `lowball-countries: ${rules.length} candidate rules, ${grouped.length} match at least one country\n`,
   );
 
   const candidates: CountryCandidate[] = [];
   const rejections = new Map<CountryGateFailure, number>();
-  for (const [key, list] of viable) {
-    const colon = key.indexOf(":");
-    const value = key.slice(colon + 1);
-    const firstWord = list[0]?.word ?? "";
-    const affixType = firstWord.endsWith(value) ? "suffix" : "prefix";
-    const candidate: CountryCandidate = { affixType, affixValue: value, words: list };
+  for (const candidate of grouped) {
     const failure = countryGateFailureReason(candidate);
     if (failure !== null) {
       rejections.set(failure, (rejections.get(failure) ?? 0) + 1);
@@ -95,10 +88,15 @@ async function main(): Promise<void> {
     process.stdout.write(`  rejected ${String(n).padStart(4)} -- ${reason}\n`);
   }
 
+  // Deterministic ordering, same rationale as tools/build-lowball.ts: hash rather
+  // than lexical sort so the daily rotation does not serve five "contains g",
+  // "contains h", "contains i"... days in a row.
   const byHash = (a: CountryCandidate, b: CountryCandidate): number => {
-    const ha = fnv1a32(`lowball-countries|${a.affixType}|${a.affixValue}`);
-    const hb = fnv1a32(`lowball-countries|${b.affixType}|${b.affixValue}`);
-    return ha - hb || `${a.affixType}:${a.affixValue}`.localeCompare(`${b.affixType}:${b.affixValue}`);
+    const ka = JSON.stringify(a.rule);
+    const kb = JSON.stringify(b.rule);
+    const ha = fnv1a32(`lowball-countries|${ka}`);
+    const hb = fnv1a32(`lowball-countries|${kb}`);
+    return ha - hb || ka.localeCompare(kb);
   };
   candidates.sort(byHash);
 
@@ -111,10 +109,10 @@ async function main(): Promise<void> {
 
   const pack = {
     contentPackVersion: PACK_VERSION,
-    datasetId: "country-list-1.0",
+    datasetId: "country-list-2.0",
     puzzleCount: puzzles.length,
     dayBoundaryRule: "UTC",
-    fairnessGateVersion: "1.0.0",
+    fairnessGateVersion: "2.0.0",
     puzzles,
   };
   const json = JSON.stringify(pack);

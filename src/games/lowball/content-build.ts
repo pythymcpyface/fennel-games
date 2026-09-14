@@ -5,14 +5,15 @@
 import {
   FINDABLE_MAX_TIER,
   MAX_PANEL_SCORE,
-  matchesAffix,
+  matchesRule,
+  ruleLabel,
   type Answer,
-  type AffixType,
+  type CategoryRule,
   type Puzzle,
 } from "./types.ts";
 
-/** Does this word fit the category pattern? Re-exported so build and runtime share one rule. */
-export { matchesAffix };
+/** Does this word fit the category rule? Re-exported so build and runtime share one rule. */
+export { matchesRule };
 
 // --- Content safety (REQ-001, REQ-002, REQ-003) ------------------------------
 //
@@ -105,7 +106,7 @@ export const PREFIX_LENGTHS: readonly number[] = [3, 4];
 /**
  * Group words into candidate affix categories, keyed `"<type>:<value>"`.
  *
- * Membership is decided by calling the RUNTIME `matchesAffix` predicate, not by a
+ * Membership is decided by calling the RUNTIME `matchesRule` predicate, not by a
  * parallel length calculation. The original generator used
  * `word.length > affixValue.length + 1` while the runtime uses
  * `word.length > affixValue.length`, so every word exactly one letter longer than its
@@ -115,7 +116,7 @@ export const PREFIX_LENGTHS: readonly number[] = [3, 4];
  */
 export function groupWordsByAffix(words: readonly string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
-  const add = (type: AffixType, value: string, word: string): void => {
+  const add = (type: "prefix" | "suffix", value: string, word: string): void => {
     const key = `${type}:${value}`;
     const list = groups.get(key);
     if (list === undefined) groups.set(key, [word]);
@@ -124,15 +125,16 @@ export function groupWordsByAffix(words: readonly string[]): Map<string, string[
   for (const word of words) {
     for (const len of SUFFIX_LENGTHS) {
       const value = word.slice(-len);
-      if (value.length === len && matchesAffix(word, "suffix", value)) add("suffix", value, word);
+      if (value.length === len && matchesRule(word, { kind: "suffix", value })) add("suffix", value, word);
     }
     for (const len of PREFIX_LENGTHS) {
       const value = word.slice(0, len);
-      if (value.length === len && matchesAffix(word, "prefix", value)) add("prefix", value, word);
+      if (value.length === len && matchesRule(word, { kind: "prefix", value })) add("prefix", value, word);
     }
   }
   return groups;
 }
+
 
 
 // --- Fairness gate thresholds (frozen per content-pack version, ADR-004) ------
@@ -162,6 +164,16 @@ const LOG_CEIL = 5.2;
 /** Convexity: >1 pushes mid-frequency words down the scale. */
 const CURVE = 2.2;
 
+/** The GloVe-rank curve alone, shared by panelScore and countryPanelScore. */
+function scoreFromRank(rank: number): number {
+  const x = Math.log10(rank);
+  const u = (LOG_CEIL - x) / (LOG_CEIL - LOG_FLOOR);
+  const clampedU = Math.min(1, Math.max(0, u));
+  const raw = MAX_PANEL_SCORE * Math.pow(clampedU, CURVE);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.min(MAX_PANEL_SCORE, Math.max(0, Math.round(raw)));
+}
+
 /**
  * How many of a notional 100 people would give this answer.
  *
@@ -173,13 +185,7 @@ export function panelScore(rank: number | null, tier: number): number {
   if (rank === null) return 0;
   if (!Number.isFinite(rank) || rank <= 0) return 0;
   if (!isFindable(tier)) return 0;
-
-  const x = Math.log10(rank);
-  const u = (LOG_CEIL - x) / (LOG_CEIL - LOG_FLOOR);
-  const clampedU = Math.min(1, Math.max(0, u));
-  const raw = MAX_PANEL_SCORE * Math.pow(clampedU, CURVE);
-  if (!Number.isFinite(raw)) return 0;
-  return Math.min(MAX_PANEL_SCORE, Math.max(0, Math.round(raw)));
+  return scoreFromRank(rank);
 }
 
 /** Whether a lay player could plausibly retrieve a word at this SCOWL tier. */
@@ -200,8 +206,7 @@ export interface ScoredWord {
 
 /** A category proposed by the build tool, before the fairness gate runs. */
 export interface Candidate {
-  affixType: AffixType;
-  affixValue: string;
+  rule: CategoryRule;
   words: ScoredWord[];
 }
 
@@ -213,13 +218,6 @@ export type GateFailure =
   | "no_findable_zero"
   | "no_ladder"
   | "par_zero";
-
-/** Human-readable prompt for a category. */
-export function categoryLabel(affixType: AffixType, affixValue: string): string {
-  const verb = affixType === "suffix" ? "ending" : "starting";
-  const prep = affixType === "suffix" ? "in" : "with";
-  return `Words ${verb} ${prep} "${affixValue}"`;
-}
 
 /**
  * Score every word and flag its findability, highest score first so the reveal can
@@ -249,6 +247,49 @@ export function computePar(answers: Answer[]): number {
   if (scores.length === 0) return 0;
   const mid = Math.floor(scores.length / 2);
   const median = scores.length % 2 === 1 ? scores[mid] : (scores[mid - 1] + scores[mid]) / 2;
+  return Math.round(median);
+}
+
+/**
+ * The lowest achievable 2-sweep total using only findable answers, i.e. the best
+ * a player who finds the two weakest real answers can score. `SWEEPS_TOTAL` is 2,
+ * so this is exactly the floor a category's par must clear to be winnable at all.
+ * Sorted ascending; the two lowest scores are the best case (REQ-042).
+ */
+export function bestTwoFindableSum(answers: readonly Answer[]): number {
+  const scores = answers
+    .filter((a) => a.isFindable)
+    .map((a) => a.panelScore)
+    .sort((a, b) => a - b);
+  return (scores[0] ?? 0) + (scores[1] ?? 0);
+}
+
+/**
+ * Beat-par target for a TWO-SWEEP round: the median of every distinct pair-sum
+ * across findable answers, rather than the median of single answers (REQ-041).
+ *
+ * `computePar` (words) takes the median of single scores, which understates the
+ * true beat-par bar for a round that sums two sweeps — half of it is unreachable
+ * with only one answer in hand. Countries has a much smaller answer pool (no
+ * findable zero-scorer exists among 154+ names), so that understatement makes a
+ * category mathematically unwinnable: par sits below the sum of even the two
+ * weakest real answers. Pair-median par fixes this for the countries domain
+ * without touching the words pack, which is already winnable under the simpler
+ * definition and has its own tuning history.
+ */
+export function computeCountryPar(answers: Answer[]): number {
+  const scores = answers
+    .filter((a) => a.isFindable)
+    .map((a) => a.panelScore)
+    .sort((a, b) => a - b);
+  const sums: number[] = [];
+  for (let i = 0; i < scores.length; i++) {
+    for (let j = i + 1; j < scores.length; j++) sums.push(scores[i] + scores[j]);
+  }
+  if (sums.length === 0) return 0;
+  sums.sort((a, b) => a - b);
+  const mid = Math.floor(sums.length / 2);
+  const median = sums.length % 2 === 1 ? sums[mid] : (sums[mid - 1] + sums[mid]) / 2;
   return Math.round(median);
 }
 
@@ -293,9 +334,8 @@ export function buildPuzzles(candidates: Candidate[]): Puzzle[] {
     const answers = buildAnswers(candidate);
     puzzles.push({
       puzzleId: `puz-${puzzles.length.toString().padStart(4, "0")}`,
-      affixType: candidate.affixType,
-      affixValue: candidate.affixValue,
-      categoryLabel: categoryLabel(candidate.affixType, candidate.affixValue),
+      rule: candidate.rule,
+      categoryLabel: ruleLabel(candidate.rule, "words"),
       answers,
       parValue: computePar(answers),
       categoryDomain: "words",
@@ -320,8 +360,8 @@ export function assertPuzzlesValid(puzzles: Puzzle[]): void {
     for (const a of p.answers) {
       if (seen.has(a.word)) throw new Error(`${p.puzzleId}: duplicate answer "${a.word}"`);
       seen.add(a.word);
-      if (!matchesAffix(a.word, p.affixType, p.affixValue)) {
-        throw new Error(`${p.puzzleId}: answer "${a.word}" fails affix ${p.affixType} "${p.affixValue}"`);
+      if (!matchesRule(a.word, p.rule)) {
+        throw new Error(`${p.puzzleId}: answer "${a.word}" fails rule ${JSON.stringify(p.rule)}`);
       }
       if (!Number.isInteger(a.panelScore) || a.panelScore < 0 || a.panelScore > MAX_PANEL_SCORE) {
         throw new Error(`${p.puzzleId}: answer "${a.word}" has out-of-range score ${a.panelScore}`);
@@ -335,16 +375,25 @@ export function assertPuzzlesValid(puzzles: Puzzle[]): void {
 // =============================================================================
 //
 // The countries variant reuses every engine primitive unchanged. Differences:
-//   1. Answer pool is COUNTRY_LIST (single-word sovereign state names).
-//   2. Scoring signal: GloVe rank where available, editorial tier otherwise.
-//   3. Suffix lengths [3, 4] only (no 2-letter suffixes).
-//   4. Lower fairness-gate thresholds (smaller namespace ~100 names vs ~50 000).
-//   5. categoryLabel uses "Countries" wording.
+//   1. Answer pool is COUNTRY_LIST (sovereign state names, single- and multi-word;
+//      normalize() strips spaces so "South Africa" and "southafrica" are the same
+//      submission).
+//   2. Scoring signal: GloVe rank where available, editorial tier fallback
+//      otherwise — NOT a hard zero. A country absent from GloVe's corpus is not
+//      the same thing as a country nobody would say (REQ-COUNTRY-002).
+//   3. Category rules are generated across many families (letter position,
+//      containment, length, vowel shape, substrings), not just fixed-length
+//      prefixes/suffixes, because the ~190-name pool cannot support enough
+//      3/4-letter-affix categories with adequate supply (REQ-COUNTRY-001).
+//   4. Fairness-gate thresholds sized for a small closed namespace, PLUS a
+//      winnability check: the two lowest findable scores must sum below par,
+//      since a round is two sweeps, not one (REQ-COUNTRY-003).
+//   5. ruleLabel(rule, "countries") supplies "Countries" wording.
 //   6. Built Puzzle carries categoryDomain: "countries".
 
 /**
- * Recognisability tier for a country whose name is absent from GloVe vocabulary.
- * Mirrors the SCOWL-tier scale so panelScore() can be reused directly.
+ * Recognisability tier for a country. Mirrors the SCOWL-tier scale so
+ * isFindable() can be reused directly.
  *   10 — universally known (G7 / large economies)
  *   35 — well-known (medium-sized, frequently in the news)
  *   50 — findable but less prominent
@@ -354,17 +403,18 @@ export type CountryTier = 10 | 35 | 50 | 70;
 
 /** A country entry in the static list. */
 export interface CountryEntry {
-  /** Lowercase, single-word, a-z only — the normalised form players type. */
+  /** Lowercase, a-z only, no spaces — the normalised form players type. */
   name: string;
   /**
    * Editorial recognisability tier. When the name IS in GloVe the rank
-   * governs the score, but tier still controls isFindable.
+   * governs the score, but tier still controls isFindable and supplies the
+   * fallback score when the name is out of vocabulary.
    */
   tier: CountryTier;
 }
 
 /**
- * All single-word sovereign state names, normalised to lowercase a-z.
+ * All sovereign state names, normalised to lowercase a-z with spaces removed.
  * Tier: 10 = universally known, 35 = well-known, 50 = findable, 70 = specialist.
  * Duplicates resolved by COUNTRIES (first-seen wins, lower tier kept).
  */
@@ -389,7 +439,13 @@ export const COUNTRY_LIST: readonly CountryEntry[] = [
   { name: "israel",        tier: 10 }, { name: "iraq",        tier: 10 },
   { name: "chile",         tier: 10 }, { name: "peru",        tier: 10 },
   { name: "venezuela",     tier: 10 }, { name: "cuba",        tier: 10 },
-  { name: "iceland",       tier: 10 },
+  { name: "iceland",       tier: 10 }, { name: "libya",       tier: 10 },
+  { name: "yemen",         tier: 10 },
+  // tier 10 — universally known, multi-word (normalize() strips the space)
+  { name: "unitedkingdom", tier: 10 }, { name: "unitedstates", tier: 10 },
+  { name: "southafrica",   tier: 10 }, { name: "newzealand",   tier: 10 },
+  { name: "saudiarabia",   tier: 10 }, { name: "southkorea",   tier: 10 },
+  { name: "northkorea",    tier: 10 },
   // tier 35 — well-known
   { name: "romania",       tier: 35 }, { name: "hungary",     tier: 35 },
   { name: "austria",       tier: 35 }, { name: "switzerland", tier: 35 },
@@ -419,8 +475,14 @@ export const COUNTRY_LIST: readonly CountryEntry[] = [
   { name: "chad",          tier: 35 }, { name: "madagascar",  tier: 35 },
   { name: "zambia",        tier: 35 }, { name: "malawi",      tier: 35 },
   { name: "rwanda",        tier: 35 }, { name: "haiti",       tier: 35 },
-  { name: "jamaica",       tier: 35 },
-  // tier 50 — findable, less prominent
+  { name: "jamaica",       tier: 35 }, { name: "liberia",     tier: 35 },
+  // tier 35 — well-known, multi-word
+  { name: "srilanka",      tier: 35 }, { name: "costarica",   tier: 35 },
+  { name: "czechrepublic", tier: 35 }, { name: "dominicanrepublic", tier: 35 },
+  { name: "unitedarabemirates", tier: 35 },
+  // tier 50 — findable, less prominent (includes the small-island states that
+  // were previously mis-tiered 70 despite being in the GloVe corpus — see
+  // REQ-COUNTRY-002)
   { name: "mongolia",      tier: 50 }, { name: "belarus",     tier: 50 },
   { name: "moldova",       tier: 50 }, { name: "kosovo",      tier: 50 },
   { name: "macedonia",     tier: 50 }, { name: "montenegro",  tier: 50 },
@@ -442,16 +504,29 @@ export const COUNTRY_LIST: readonly CountryEntry[] = [
   { name: "qatar",         tier: 50 }, { name: "cyprus",      tier: 50 },
   { name: "malta",         tier: 50 }, { name: "luxembourg",  tier: 50 },
   { name: "andorra",       tier: 50 }, { name: "monaco",      tier: 50 },
-  { name: "liechtenstein", tier: 50 },
+  { name: "liechtenstein", tier: 50 }, { name: "vanuatu",     tier: 50 },
+  { name: "samoa",         tier: 50 }, { name: "tonga",       tier: 50 },
+  { name: "kiribati",      tier: 50 }, { name: "tuvalu",      tier: 50 },
+  { name: "nauru",         tier: 50 }, { name: "palau",       tier: 50 },
+  { name: "comoros",       tier: 50 }, { name: "seychelles",  tier: 50 },
+  { name: "mauritius",     tier: 50 }, { name: "micronesia",  tier: 50 },
+  { name: "dominica",      tier: 50 }, { name: "grenada",     tier: 50 },
+  { name: "barbados",      tier: 50 }, { name: "bahamas",     tier: 50 },
+  { name: "fiji",          tier: 50 }, { name: "gambia",      tier: 50 },
+  { name: "mauritania",    tier: 50 },
+  // tier 50 — findable, multi-word
+  { name: "elsalvador",    tier: 50 }, { name: "ivorycoast",  tier: 50 },
+  { name: "sierraleone",   tier: 50 }, { name: "burkinafaso", tier: 50 },
+  { name: "southsudan",    tier: 50 }, { name: "papuanewguinea", tier: 50 },
+  { name: "centralafricanrepublic", tier: 50 }, { name: "trinidadandtobago", tier: 50 },
+  { name: "vaticancity",   tier: 50 },
   // tier 70 — specialist / rarely mentioned
-  { name: "vanuatu",       tier: 70 }, { name: "samoa",       tier: 70 },
-  { name: "tonga",         tier: 70 }, { name: "kiribati",    tier: 70 },
-  { name: "tuvalu",        tier: 70 }, { name: "nauru",       tier: 70 },
-  { name: "palau",         tier: 70 }, { name: "comoros",     tier: 70 },
-  { name: "seychelles",    tier: 70 }, { name: "mauritius",   tier: 70 },
-  { name: "micronesia",    tier: 70 }, { name: "dominica",    tier: 70 },
-  { name: "grenada",       tier: 70 }, { name: "barbados",    tier: 70 },
-  { name: "bahamas",       tier: 70 },
+  { name: "eswatini",      tier: 70 },
+  // tier 70 — specialist, multi-word
+  { name: "capeverde",     tier: 70 }, { name: "easttimor",   tier: 70 },
+  { name: "equatorialguinea", tier: 70 }, { name: "guineabissau", tier: 70 },
+  { name: "marshallislands", tier: 70 }, { name: "solomonislands", tier: 70 },
+  { name: "sanmarino",     tier: 70 }, { name: "saotomeandprincipe", tier: 70 },
 ];
 
 /** De-duplicated country list. First-seen wins so lower tier is always kept. */
@@ -464,27 +539,47 @@ export const COUNTRIES: readonly CountryEntry[] = ((): readonly CountryEntry[] =
   return result;
 })();
 
-// --- Country fairness-gate thresholds ----------------------------------------
-// Lower than word-mode thresholds: country namespace is ~120 names vs ~50 000.
+// --- Country panel score: GloVe rank, with a TIER FALLBACK instead of a hard
+// zero (REQ-COUNTRY-002) -------------------------------------------------------
+//
+// panelScore() (words) returns 0 for any rank === null, which is correct there:
+// GloVe's 400k-word vocabulary is large enough that absence really does mean
+// "nobody would say this". It is the wrong rule for countries: several genuinely
+// well-known names (multi-word states like "south africa", which GloVe never
+// tokenises as one word) are absent from GloVe for a corpus-tokenisation reason
+// that has nothing to do with recognisability. Falling back to a score derived
+// from the editorial tier keeps those countries scoring like their tier suggests
+// instead of like a findable-zero trap.
 
-export const COUNTRY_MIN_ANSWERS = 3;
-export const COUNTRY_MAX_ANSWERS = 30;
-export const COUNTRY_MIN_TRAP_SCORE = 15;
-export const COUNTRY_MIN_FINDABLE = 3;
-export const COUNTRY_MIN_NONZERO = 2;
-export const COUNTRY_MIN_DISTINCT_NONZERO = 2;
+/** Fallback score used when a country's name is absent from the GloVe corpus. */
+const COUNTRY_TIER_FALLBACK: Record<CountryTier, number> = { 10: 85, 35: 45, 50: 22, 70: 8 };
 
-/** Suffix lengths for country categories — no 2-letter suffixes. */
-export const COUNTRY_SUFFIX_LENGTHS: readonly number[] = [3, 4];
-/** Prefix lengths for country categories. */
-export const COUNTRY_PREFIX_LENGTHS: readonly number[] = [3, 4];
-
-/** Human-readable prompt for a country category. */
-export function categoryLabelCountries(affixType: AffixType, affixValue: string): string {
-  const verb = affixType === "suffix" ? "ending" : "starting";
-  const prep = affixType === "suffix" ? "in" : "with";
-  return `Countries ${verb} ${prep} "${affixValue}"`;
+/**
+ * How many of a notional 100 people would give this country. Unlike
+ * `panelScore`, an out-of-vocabulary name does NOT collapse to 0 — it falls back
+ * to a score fixed by editorial tier, since OOV here usually just means "GloVe
+ * doesn't tokenise multi-word names", not "obscure".
+ */
+export function countryPanelScore(rank: number | null, tier: CountryTier): number {
+  if (!isFindable(tier)) return 0;
+  if (rank === null || !Number.isFinite(rank) || rank <= 0) return COUNTRY_TIER_FALLBACK[tier];
+  return scoreFromRank(rank);
 }
+
+// --- Country fairness-gate thresholds ----------------------------------------
+// Sized for a ~190-name closed namespace, not the ~50 000-word corpus, AND for a
+// TWO-SWEEP round: a category is worthless if its two weakest findable answers
+// already sum to par or above (REQ-COUNTRY-003).
+
+export const COUNTRY_MIN_ANSWERS = 12;
+export const COUNTRY_MAX_ANSWERS = 45;
+export const COUNTRY_MIN_TRAP_SCORE = 45;
+export const COUNTRY_MIN_FINDABLE = 12;
+export const COUNTRY_MIN_NONZERO = 10;
+export const COUNTRY_MIN_DISTINCT_NONZERO = 8;
+
+/** Prefix/suffix/contains substring lengths tested when enumerating rules. */
+export const COUNTRY_SUBSTRING_LENGTHS: readonly number[] = [2, 3, 4];
 
 /** A country name with the two signals the scoring formula needs. */
 export interface ScoredCountry {
@@ -497,62 +592,118 @@ export interface ScoredCountry {
 
 /** A country category proposed by the build tool, before the fairness gate. */
 export interface CountryCandidate {
-  affixType: AffixType;
-  affixValue: string;
+  rule: CategoryRule;
   words: ScoredCountry[];
 }
 
 /**
- * Group country names into candidate affix categories.
- * Uses the RUNTIME matchesAffix predicate so build and runtime cannot diverge.
+ * Every candidate rule worth testing against the country pool: fixed structural
+ * rules (letter position, length, vowel shape) enumerated directly, plus every
+ * prefix/suffix/contains substring that actually OCCURS in some country name.
+ *
+ * Testing only occurring substrings — rather than every possible 2..4-letter
+ * combination — mirrors `groupWordsByAffix`'s approach and keeps the candidate
+ * set proportional to the corpus: a substring absent from every name can never
+ * clear `COUNTRY_MIN_ANSWERS`, so generating it would only waste gate cycles.
  */
-export function groupCountriesByAffix(
-  countries: readonly ScoredCountry[],
-): Map<string, ScoredCountry[]> {
-  const groups = new Map<string, ScoredCountry[]>();
-  const add = (type: AffixType, value: string, sc: ScoredCountry): void => {
-    const key = `${type}:${value}`;
-    const list = groups.get(key);
-    if (list === undefined) groups.set(key, [sc]);
-    else list.push(sc);
-  };
-  for (const sc of countries) {
-    for (const len of COUNTRY_SUFFIX_LENGTHS) {
-      const value = sc.word.slice(-len);
-      if (value.length === len && matchesAffix(sc.word, "suffix", value)) add("suffix", value, sc);
+export function enumerateCountryRules(countries: readonly ScoredCountry[]): CategoryRule[] {
+  const rules: CategoryRule[] = [];
+  const AZ = "abcdefghijklmnopqrstuvwxyz".split("");
+  for (const letter of AZ) {
+    rules.push({ kind: "startsLetter", letter });
+    rules.push({ kind: "endsLetter", letter });
+    rules.push({ kind: "containsLetter", letter });
+    rules.push({ kind: "lacksLetter", letter });
+    rules.push({ kind: "letterAtLeast", letter, n: 3 });
+  }
+  for (const n of [4, 5, 6, 7, 8, 9, 10, 11, 12]) rules.push({ kind: "lengthEq", n });
+  for (const n of [6, 7, 8, 9, 10, 11, 12]) rules.push({ kind: "lengthGte", n });
+  for (const n of [4, 5, 6, 7, 8]) rules.push({ kind: "lengthLte", n });
+  rules.push(
+    { kind: "startsVowel" },
+    { kind: "startsConsonant" },
+    { kind: "sameFirstLast" },
+    { kind: "tripleConsonant" },
+  );
+  for (const n of [3, 4, 5, 6]) rules.push({ kind: "vowelCountGte", n });
+  for (const n of [2, 3]) rules.push({ kind: "vowelCountLte", n });
+
+  const seenPrefix = new Set<string>();
+  const seenSuffix = new Set<string>();
+  const seenContains = new Set<string>();
+  for (const c of countries) {
+    for (const len of COUNTRY_SUBSTRING_LENGTHS) {
+      const pre = c.word.slice(0, len);
+      if (pre.length === len && !seenPrefix.has(pre)) {
+        seenPrefix.add(pre);
+        rules.push({ kind: "prefix", value: pre });
+      }
+      const suf = c.word.slice(-len);
+      if (suf.length === len && !seenSuffix.has(suf)) {
+        seenSuffix.add(suf);
+        rules.push({ kind: "suffix", value: suf });
+      }
     }
-    for (const len of COUNTRY_PREFIX_LENGTHS) {
-      const value = sc.word.slice(0, len);
-      if (value.length === len && matchesAffix(sc.word, "prefix", value)) add("prefix", value, sc);
+    for (let i = 0; i + 2 <= c.word.length; i++) {
+      const g = c.word.slice(i, i + 2);
+      if (!seenContains.has(g)) {
+        seenContains.add(g);
+        rules.push({ kind: "contains", value: g });
+      }
     }
   }
-  return groups;
+  return rules;
+}
+
+/**
+ * Group countries by every candidate rule. Membership is decided by calling the
+ * RUNTIME `matchesRule` predicate — the same guarantee `groupWordsByAffix` gives
+ * the words pack, extended to a rule space rather than just two affix kinds.
+ * Rules matching zero countries are dropped immediately; the gate would reject
+ * them anyway, but there is no reason to carry them through it.
+ */
+export function groupCountriesByRule(
+  rules: readonly CategoryRule[],
+  countries: readonly ScoredCountry[],
+): CountryCandidate[] {
+  const candidates: CountryCandidate[] = [];
+  for (const rule of rules) {
+    const words = countries.filter((c) => matchesRule(c.word, rule));
+    if (words.length > 0) candidates.push({ rule, words });
+  }
+  return candidates;
 }
 
 /**
  * Score every country and flag findability, highest score first.
- * Reuses panelScore / isFindable directly — formula is identical.
+ * Uses `countryPanelScore` (tier fallback on OOV), not `panelScore` (hard-zero
+ * on OOV) — see REQ-COUNTRY-002.
  */
 export function buildCountryAnswers(candidate: CountryCandidate): Answer[] {
   return candidate.words
     .map((sc) => ({
       word: sc.word,
-      panelScore: panelScore(sc.rank, sc.tier),
+      panelScore: countryPanelScore(sc.rank, sc.tier),
       isFindable: isFindable(sc.tier),
     }))
     .sort((a, b) => b.panelScore - a.panelScore || a.word.localeCompare(b.word));
 }
 
-/** Why a country candidate was refused. Reuses the same labels as GateFailure. */
-export type CountryGateFailure = GateFailure;
+/**
+ * Why a country candidate was refused. Extends GateFailure with `unwinnable`,
+ * the one extra rule the country gate needs that the words gate does not (see
+ * `countryGateFailureReason`).
+ */
+export type CountryGateFailure = GateFailure | "unwinnable";
 
 /**
- * Fairness gate for country categories — same six-rule logic as
- * gateFailureReason but with COUNTRY_* thresholds.
+ * Fairness gate for country categories — same shape as `gateFailureReason`, with
+ * COUNTRY_* thresholds and one extra rule `gateFailureReason` does not need: a
+ * round sums TWO sweeps, so a category is unwinnable unless its two weakest
+ * findable answers together undercut par. The words pack never needs this check
+ * because it always contains a findable zero-scorer; the country pool does not.
  */
-export function countryGateFailureReason(
-  candidate: CountryCandidate,
-): CountryGateFailure | null {
+export function countryGateFailureReason(candidate: CountryCandidate): CountryGateFailure | null {
   const answers = buildCountryAnswers(candidate);
   if (answers.length < COUNTRY_MIN_ANSWERS || answers.length > COUNTRY_MAX_ANSWERS)
     return "answer_count";
@@ -564,7 +715,9 @@ export function countryGateFailureReason(
   const distinct = new Set(nonZero.map((a) => a.panelScore)).size;
   if (nonZero.length < COUNTRY_MIN_NONZERO || distinct < COUNTRY_MIN_DISTINCT_NONZERO)
     return "no_ladder";
-  if (computePar(answers) <= 0) return "par_zero";
+  const par = computeCountryPar(answers);
+  if (par <= 0) return "par_zero";
+  if (bestTwoFindableSum(answers) >= par) return "unwinnable";
   return null;
 }
 
@@ -582,11 +735,10 @@ export function buildCountryPuzzles(
     const answers = buildCountryAnswers(candidate);
     puzzles.push({
       puzzleId: `puz-${(startIndex + puzzles.length).toString().padStart(4, "0")}`,
-      affixType: candidate.affixType,
-      affixValue: candidate.affixValue,
-      categoryLabel: categoryLabelCountries(candidate.affixType, candidate.affixValue),
+      rule: candidate.rule,
+      categoryLabel: ruleLabel(candidate.rule, "countries"),
       answers,
-      parValue: computePar(answers),
+      parValue: computeCountryPar(answers),
       categoryDomain: "countries",
     });
   }
@@ -603,19 +755,34 @@ export function assertCountryPuzzlesValid(puzzles: Puzzle[]): void {
     }
     if (p.parValue <= 0)
       throw new Error(`${p.puzzleId}: par must exceed 0, got ${p.parValue}`);
+    // A round sums SWEEPS_TOTAL (2) sweeps: a par that cannot be undercut by the
+    // best two findable answers makes the category impossible to win no matter
+    // what the player does — the exact bug this refactor exists to fix.
+    if (bestTwoFindableSum(p.answers) >= p.parValue) {
+      throw new Error(
+        `${p.puzzleId}: unwinnable — best 2-answer sum ${bestTwoFindableSum(p.answers)} ` +
+          `is not below par ${p.parValue}`,
+      );
+    }
     if (p.answers.length < COUNTRY_MIN_ANSWERS || p.answers.length > COUNTRY_MAX_ANSWERS) {
       throw new Error(
         `${p.puzzleId}: answer count ${p.answers.length} outside ` +
           `${COUNTRY_MIN_ANSWERS}..${COUNTRY_MAX_ANSWERS}`,
       );
     }
+    const findableSupply = p.answers.filter((a) => a.isFindable).length;
+    if (findableSupply < COUNTRY_MIN_FINDABLE) {
+      throw new Error(
+        `${p.puzzleId}: only ${findableSupply} findable answers, need at least ${COUNTRY_MIN_FINDABLE}`,
+      );
+    }
     const seen = new Set<string>();
     for (const a of p.answers) {
       if (seen.has(a.word)) throw new Error(`${p.puzzleId}: duplicate answer "${a.word}"`);
       seen.add(a.word);
-      if (!matchesAffix(a.word, p.affixType, p.affixValue)) {
+      if (!matchesRule(a.word, p.rule)) {
         throw new Error(
-          `${p.puzzleId}: answer "${a.word}" fails affix ${p.affixType} "${p.affixValue}"`,
+          `${p.puzzleId}: answer "${a.word}" fails rule ${JSON.stringify(p.rule)}`,
         );
       }
       if (!Number.isInteger(a.panelScore) || a.panelScore < 0 || a.panelScore > MAX_PANEL_SCORE) {

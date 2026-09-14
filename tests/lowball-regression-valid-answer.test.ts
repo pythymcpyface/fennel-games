@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { isBlockedWord, isSafeAffix, groupWordsByAffix } from "../src/games/lowball/content-build.ts";
-import { matchesAffix } from "../src/games/lowball/types.ts";
+import { matchesRule } from "../src/games/lowball/types.ts";
 import type { Puzzle } from "../src/games/lowball/types.ts";
 
 // Regression suite for bug `lowball-valid-answer-rejected`.
@@ -89,8 +89,9 @@ describe("cause A — category prompts stay clean (REQ-003)", () => {
   // TEST-008
   it("ships no category prompt containing a blocked term", () => {
     for (const p of pack.puzzles) {
-      expect(isSafeAffix(p.affixValue)).toBe(true);
-      expect(isBlockedWord(p.affixValue)).toBe(false);
+      const rule = p.rule as { kind: "prefix" | "suffix"; value: string };
+      expect(isSafeAffix(rule.value)).toBe(true);
+      expect(isBlockedWord(rule.value)).toBe(false);
     }
   });
 });
@@ -118,19 +119,21 @@ describe("cause B — build-time grouping equals the runtime rule (REQ-004)", ()
     expect(grouped.get("suffix:ape")).toBeUndefined();
   });
 
-  it("agrees with matchesAffix for every grouping it produces", () => {
+  it("agrees with matchesRule for every grouping it produces", () => {
     const grouped = groupWordsByAffix(["cape", "grape", "escape", "landscape", "came", "bough"]);
     for (const [key, words] of grouped) {
       const [type, value] = key.split(":") as ["suffix" | "prefix", string];
       for (const w of words) {
-        expect(matchesAffix(w, type, value)).toBe(true);
+        expect(matchesRule(w, { kind: type, value })).toBe(true);
       }
     }
   });
 });
 
 describe("the reported case (REQ-008)", () => {
-  const ape = pack.puzzles.find((p) => p.affixType === "suffix" && p.affixValue === "ape");
+  const ape = pack.puzzles.find(
+    (p) => p.rule.kind === "suffix" && (p.rule as { value: string }).value === "ape",
+  );
 
   it("ships the 'ape' category", () => {
     expect(ape).toBeDefined();
@@ -160,12 +163,12 @@ describe("the reported case (REQ-008)", () => {
 
 describe("soundness — no shipped answer violates the runtime rule (REQ-006)", () => {
   // TEST-014: every answer the pack ships must be one the engine would accept.
-  it("every answer in every category satisfies matchesAffix", () => {
+  it("every answer in every category satisfies matchesRule", () => {
     const violations: string[] = [];
     for (const p of pack.puzzles) {
       for (const a of p.answers) {
-        if (!matchesAffix(a.word, p.affixType, p.affixValue)) {
-          violations.push(`${p.puzzleId} ${p.affixType}:${p.affixValue} -> ${a.word}`);
+        if (!matchesRule(a.word, p.rule)) {
+          violations.push(`${p.puzzleId} ${JSON.stringify(p.rule)} -> ${a.word}`);
         }
       }
     }
