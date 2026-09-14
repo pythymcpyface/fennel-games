@@ -30,8 +30,15 @@ export function canShare(state: AttemptState): boolean {
 
 /**
  * Build the shareable summary. Reveals only the total, the par and per-sweep bars.
+ * `gameTitle` defaults to "Lowball" for the word variant; the countries variant
+ * passes "Lowball: Countries" so a shared result never misrepresents which mode
+ * was played (mirrors the on-screen header — REQ-hub-01).
  */
-export function buildShareText(state: AttemptState, parValue: number): string {
+export function buildShareText(
+  state: AttemptState,
+  parValue: number,
+  gameTitle: string = "Lowball",
+): string {
   const player = state.players[state.activePlayerIndex];
   const total = totalFor(player);
   const outcome = state.verdict === "win" ? `${total}/${parValue} ✅` : `${total}/${parValue} ❌`;
@@ -43,7 +50,7 @@ export function buildShareText(state: AttemptState, parValue: number): string {
           .filter((line) => line !== "")
           .join("\n")
       : bars;
-  return `Lowball${marker} ${state.dayId} ${outcome}\n${padded}`;
+  return `${gameTitle}${marker} ${state.dayId} ${outcome}\n${padded}`;
 }
 
 /**
@@ -72,13 +79,14 @@ export function buildMpShareText(
   board: MpLeaderboardEntry[],
   mySlotIndex: number,
   dayId: string,
+  gameTitle: string = "Lowball",
 ): string {
   const me = board.find((e) => e.slotIndex === mySlotIndex);
-  if (!me) return `Lowball MP ${dayId}`;
+  if (!me) return `${gameTitle} MP ${dayId}`;
   const rankLabel = me.isJointWinner ? "Joint winner" : `#${me.rank}`;
   const playerCount = board.length;
   const bars = scoreBar(me.roundTotal / 2); // approximate single-bar from total (display only)
-  return `Lowball MP ${dayId} ${rankLabel}/${playerCount}\nTotal: ${me.roundTotal}\n${bars}`;
+  return `${gameTitle} MP ${dayId} ${rankLabel}/${playerCount}\nTotal: ${me.roundTotal}\n${bars}`;
 }
 
 /**

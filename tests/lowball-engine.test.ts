@@ -22,6 +22,7 @@ const puzzle: Puzzle = {
   affixValue: "ugh",
   categoryLabel: 'Words ending in "ugh"',
   parValue: 21,
+  categoryDomain: "words",
   answers: [
     { word: "though", panelScore: 100, isFindable: true },
     { word: "tough", panelScore: 81, isFindable: true },

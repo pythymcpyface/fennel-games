@@ -12,6 +12,7 @@ const puzzle: Puzzle = {
   affixValue: "ugh",
   categoryLabel: 'Words ending in "ugh"',
   parValue: 21,
+  categoryDomain: "words",
   answers: [
     { word: "though", panelScore: 100, isFindable: true },
     { word: "tough", panelScore: 81, isFindable: true },
@@ -41,6 +42,11 @@ describe("buildMpShareText — REQ-032", () => {
   it("share text contains 'Lowball'", () => {
     const text = buildMpShareText(board, 0, "2026-09-11");
     expect(text.toLowerCase()).toContain("lowball");
+  });
+
+  it("uses the supplied game title instead of the 'Lowball' default", () => {
+    const text = buildMpShareText(board, 0, "2026-09-11", "Lowball: Countries");
+    expect(text).toContain("Lowball: Countries");
   });
 });
 

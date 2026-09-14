@@ -10,6 +10,7 @@ const puzzle: Puzzle = {
   affixValue: "ugh",
   categoryLabel: 'Words ending in "ugh"',
   parValue: 21,
+  categoryDomain: "words",
   answers: [
     { word: "though", panelScore: 100, isFindable: true },
     { word: "tough", panelScore: 81, isFindable: true },
@@ -88,6 +89,16 @@ describe("buildShareText — REQ-047, REQ-048", () => {
     const text = buildShareText(playRound("daily", "trough", "bough"), puzzle.parValue);
     expect(text).toContain("Lowball");
     expect(text).toContain("2026-09-10");
+  });
+
+  it("uses the supplied game title instead of the 'Lowball' default", () => {
+    const text = buildShareText(
+      playRound("daily", "trough", "bough"),
+      puzzle.parValue,
+      "Lowball: Countries",
+    );
+    expect(text).toContain("Lowball: Countries");
+    expect(text).not.toMatch(/^Lowball /); // not the bare word-mode title
   });
 
   it("distinguishes a win from a loss", () => {

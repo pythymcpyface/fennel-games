@@ -3,7 +3,7 @@ import { canonicalizeDayId } from "../../kit/selection.ts";
 import { loadStats, saveStats, recordPlayed, recordWon, type Stats } from "../../kit/stats.ts";
 import { saveAttempt, loadAttempt } from "../../kit/persistence.ts";
 import type { AttemptState, InvalidReason, Puzzle, RoundMode } from "./types.ts";
-import { MAX_PANEL_SCORE, PANEL_DISCLOSURE, SWEEPS_TOTAL } from "./types.ts";
+import { MAX_PANEL_SCORE, PANEL_DISCLOSURE, PANEL_DISCLOSURE_COUNTRIES, SWEEPS_TOTAL } from "./types.ts";
 import {
   initAttempt,
   submitAnswer,
@@ -128,7 +128,18 @@ class Lowball implements GameInstance {
   private mpTickCounter = 0;
   private mpTickTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly root: HTMLElement, private readonly svc: GameServices) {}
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly svc: GameServices,
+    private readonly gameId: string = "lowball",
+    private readonly disclosure: string = PANEL_DISCLOSURE,
+  ) {}
+
+  /** Display title for this variant — drives the header bar and share text alike,
+   *  so a countries round can never announce itself as plain "Lowball" (REQ-hub-01). */
+  private get gameTitle(): string {
+    return this.gameId === "lowball-countries" ? "Lowball: Countries" : "Lowball";
+  }
 
   // --- storage keys: two distinct namespaces, never parametrised (ADR-003) ----
 
@@ -234,12 +245,12 @@ class Lowball implements GameInstance {
     // (startMpJoin is called instead of startDaily). Return a safe neutral
     // result so the hub dashboard does not crash. (REQ-FIX-001)
     if (!this.state) {
-      return { gameId: "lowball", dayId: this.dayId, played: false, solved: false };
+      return { gameId: this.gameId, dayId: this.dayId, played: false, solved: false };
     }
     // Practice never contributes to the hub dashboard.
     const isDaily = this.mode === "daily";
     return {
-      gameId: "lowball",
+      gameId: this.gameId,
       dayId: this.dayId,
       played: isDaily && this.state.sweepIndex > 0,
       solved: isDaily && this.state.verdict === "win",
@@ -307,7 +318,7 @@ class Lowball implements GameInstance {
 
     this.root.innerHTML = "";
     this.root.className = "game lowball";
-    this.root.append(homeBar(this.svc, "Lowball"));
+    this.root.append(homeBar(this.svc, this.gameTitle));
 
     const s = this.state;
     const player = s.players[s.activePlayerIndex];
@@ -350,7 +361,7 @@ class Lowball implements GameInstance {
     counter.append(bars, readout);
     this.root.append(counter);
     // REQ-053: never imply real people were surveyed.
-    this.root.append(el("p", { class: "lb-disclosure", text: PANEL_DISCLOSURE }));
+    this.root.append(el("p", { class: "lb-disclosure", text: this.disclosure }));
 
     // --- answer input (REQ-049) ------------------------------------------------
     if (!terminal) {
@@ -464,7 +475,7 @@ class Lowball implements GameInstance {
     // is the densest score presentation in the game and is appended far below the
     // counter's disclosure, so it carries its own rather than relying on scroll
     // position to keep the earlier one in view.
-    wrap.append(el("p", { class: "lb-disclosure", text: PANEL_DISCLOSURE }));
+    wrap.append(el("p", { class: "lb-disclosure", text: this.disclosure }));
     const list = el("ul", { class: "lb-answers" });
     for (const a of this.puzzle.answers) {
       const li = el("li", { class: "lb-answer" });
@@ -517,7 +528,7 @@ class Lowball implements GameInstance {
   }
 
   private async doShare(): Promise<void> {
-    const text = buildShareText(this.state, this.puzzle.parValue);
+    const text = buildShareText(this.state, this.puzzle.parValue, this.gameTitle);
     if (!isSpoilerSafe(text, this.puzzle)) {
       this.announce("Sharing blocked.");
       return;
@@ -812,7 +823,7 @@ class Lowball implements GameInstance {
   private renderLobby(): void {
     this.root.innerHTML = "";
     this.root.className = "game lowball";
-    this.root.append(homeBar(this.svc, "Lowball — Multiplayer"));
+    this.root.append(homeBar(this.svc, `${this.gameTitle} — Multiplayer`));
 
     const live = liveRegion();
     this.root.append(live);
@@ -1028,7 +1039,7 @@ class Lowball implements GameInstance {
   private renderLiveRound(): void {
     this.root.innerHTML = "";
     this.root.className = "game lowball";
-    this.root.append(homeBar(this.svc, "Lowball — Multiplayer"));
+    this.root.append(homeBar(this.svc, `${this.gameTitle} — Multiplayer`));
 
     const live = liveRegion();
     this.root.append(live);
@@ -1076,7 +1087,7 @@ class Lowball implements GameInstance {
     counter.append(bars, readout);
     this.root.append(counter);
     // REQ-053: never imply real people were surveyed.
-    this.root.append(el("p", { class: "lb-disclosure", text: PANEL_DISCLOSURE }));
+    this.root.append(el("p", { class: "lb-disclosure", text: this.disclosure }));
 
     // 2×2 player grid (REQ-016 live reveals)
     const grid = el("div", { class: "lb-mp-grid" });
@@ -1173,7 +1184,7 @@ class Lowball implements GameInstance {
   private renderLeaderboard(): void {
     this.root.innerHTML = "";
     this.root.className = "game lowball";
-    this.root.append(homeBar(this.svc, "Lowball — Multiplayer"));
+    this.root.append(homeBar(this.svc, `${this.gameTitle} — Multiplayer`));
 
     const live = liveRegion();
     this.root.append(live);
@@ -1238,7 +1249,7 @@ class Lowball implements GameInstance {
   }
 
   private async doMpShare(board: MpLeaderboardEntry[], puzzle: Puzzle | null): Promise<void> {
-    const text = buildMpShareText(board, this.mpState.mySlotIndex, this.dayId);
+    const text = buildMpShareText(board, this.mpState.mySlotIndex, this.dayId, this.gameTitle);
     if (puzzle && !isMpShareSpoilerSafe(text, puzzle)) {
       this.announce("Sharing blocked — spoiler detected.");
       return;
@@ -1265,8 +1276,25 @@ export const lowballPlugin: GamePlugin = {
   },
   contentPackPath: "./lowball.json",
   async mount(root, services) {
-    const game = new Lowball(root, services);
+    const game = new Lowball(root, services, "lowball", PANEL_DISCLOSURE);
     await game.init("./lowball.json");
+    game.render();
+    return game;
+  },
+};
+
+export const lowballCountriesPlugin: GamePlugin = {
+  meta: {
+    id: "lowball-countries",
+    name: "Lowball: Countries",
+    tagline: "Country names — the rarer your answer, the lower your score.",
+    glyph: "🌍",
+    accent: "#34d399",
+  },
+  contentPackPath: "./lowball-countries.json",
+  async mount(root, services) {
+    const game = new Lowball(root, services, "lowball-countries", PANEL_DISCLOSURE_COUNTRIES);
+    await game.init("./lowball-countries.json");
     game.render();
     return game;
   },

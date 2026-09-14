@@ -49,7 +49,7 @@ import { marginaliaPlugin } from "../games/marginalia/plugin.ts";
 import { cipherDiaryPlugin } from "../games/cipher-diary/plugin.ts";
 import { decayPlugin } from "../games/decay/plugin.ts";
 import { cascadeTypePlugin } from "../games/cascade-type/plugin.ts";
-import { lowballPlugin } from "../games/lowball/plugin.ts";
+import { lowballPlugin, lowballCountriesPlugin } from "../games/lowball/plugin.ts";
 
 // The ordered list of games shown on the hub.
 export const GAMES: GamePlugin[] = [
@@ -104,4 +104,5 @@ export const GAMES: GamePlugin[] = [
   decayPlugin,
   cascadeTypePlugin,
   lowballPlugin,
+  lowballCountriesPlugin,
 ];

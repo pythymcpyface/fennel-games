@@ -80,6 +80,17 @@ export class Hub {
   }
 
   private async openGame(plugin: GamePlugin, roomCode?: string): Promise<void> {
+    // Direct game→game hash navigation (no showHub() in between) previously left the
+    // outgoing game's juice/retention MutationObservers attached. The stale retention
+    // observer's inject() closure carried the OLD game's name/statsKey, and its guard
+    // (`!bar.querySelector(".stats-btn")`) fired first against the new game's freshly
+    // mounted `.game-bar`, planting a Stats button that opened the wrong game's modal.
+    // Disconnecting here mirrors the cleanup showHub() already performs.
+    this.juiceObserver?.disconnect();
+    this.juiceObserver = null;
+    this.retentionObserver?.disconnect();
+    this.retentionObserver = null;
+    clearInterval(this.countdownTimer);
     this.root.innerHTML = "";
     // REQ-036: pass roomCode into services so the lowball plugin can pre-fill
     // the join screen. All other 49 games receive services without roomCode (REQ-037).

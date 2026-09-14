@@ -20,6 +20,19 @@
  */
 export const PANEL_DISCLOSURE = "simulated panel of 100 \u00b7 from corpus frequency";
 
+/**
+ * Honesty disclosure for the countries variant. The scoring signal is name
+ * recognisability (GloVe rank where available, editorial tier otherwise) rather
+ * than raw corpus frequency, so the wording differs deliberately.
+ */
+export const PANEL_DISCLOSURE_COUNTRIES = "simulated panel of 100 \u00b7 from name recognisability";
+
+/**
+ * Which domain of answers a puzzle draws from. Drives the category label wording
+ * and the content-build scoring path; the engine is domain-agnostic.
+ */
+export type CategoryDomain = "words" | "countries";
+
 /** Phrasings that would falsely imply a real survey. Asserted absent by tests. */
 export const FORBIDDEN_SURVEY_PHRASES = [
   "we asked 100 people",
@@ -92,6 +105,13 @@ export interface Puzzle {
    * (REQ-042).
    */
   parValue: number;
+  /**
+   * Which answer domain this puzzle draws from. Defaults to "words" for the
+   * original English-word pack; "countries" for the geography variant. The engine
+   * is domain-agnostic — only the build tool, disclosure text, and label wording
+   * differ.
+   */
+  categoryDomain: CategoryDomain;
 }
 
 /** Why a submission scored the maximum penalty instead of its panel score. */
