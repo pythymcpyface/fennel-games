@@ -680,10 +680,8 @@ class Lowball implements GameInstance {
         });
         this.mpState = { ...this.mpState, submissions: updated };
         this.updateLiveReveal(event.slotIndex);
-        // REQ-051: animate the tension counter for this player's OWN reveal only.
-        if (event.slotIndex === this.mpState.mySlotIndex) {
-          this.startMpTicking(event.score, event.verdict);
-        }
+        // REQ-051: every player watches each answer reveal, like the show.
+        this.startMpTicking(event.score, event.verdict);
         break;
       }
 
