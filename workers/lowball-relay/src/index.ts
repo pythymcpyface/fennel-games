@@ -89,7 +89,8 @@ export default {
       let gameId: "lowball" | "lowball-countries" = "lowball";
       try {
         const body = await request.json() as { gameId?: string };
-        if (isGameId(body.gameId ?? null)) gameId = body.gameId;
+        const requestedGameId = body.gameId;
+        if (isGameId(requestedGameId ?? null)) gameId = requestedGameId;
       } catch {
         // Empty request bodies preserve the standard Lowball default.
       }
