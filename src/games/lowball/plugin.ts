@@ -988,6 +988,8 @@ class Lowball implements GameInstance {
         const copyBtn = el("button", { text: "Copy invite link", class: "btn btn-secondary" }) as HTMLButtonElement;
         copyBtn.type = "button";
         copyBtn.setAttribute("aria-label", "Copy invite link to clipboard");
+        const copyStatus = el("span", { class: "lb-copy-status" });
+        copyStatus.setAttribute("role", "status");
         copyBtn.addEventListener("click", () => {
           // Try the modern Clipboard API first; fall back to execCommand which
           // works in all browser contexts including Capacitor WebViews and older
@@ -1006,8 +1008,12 @@ class Lowball implements GameInstance {
               document.body.removeChild(ta);
               this.live.textContent = ok ? "Link copied." : "Copy failed — paste manually.";
               if (ok) {
+                copyStatus.textContent = "Link copied.";
                 copyBtn.textContent = "Link copied";
-                setTimeout(() => { copyBtn.textContent = "Copy invite link"; }, 2500);
+                setTimeout(() => {
+                  copyBtn.textContent = "Copy invite link";
+                  copyStatus.textContent = "";
+                }, 2500);
               }
             } catch {
               this.live.textContent = "Copy failed — paste manually.";
@@ -1018,8 +1024,12 @@ class Lowball implements GameInstance {
             navigator.clipboard.writeText(inviteUrl).then(
               () => {
                 this.live.textContent = "Link copied.";
+                copyStatus.textContent = "Link copied.";
                 copyBtn.textContent = "Link copied";
-                setTimeout(() => { copyBtn.textContent = "Copy invite link"; }, 2500);
+                setTimeout(() => {
+                  copyBtn.textContent = "Copy invite link";
+                  copyStatus.textContent = "";
+                }, 2500);
               },
               fallbackCopy,
             );
@@ -1027,7 +1037,7 @@ class Lowball implements GameInstance {
             fallbackCopy();
           }
         });
-        this.root.append(copyBtn);
+        this.root.append(copyBtn, copyStatus);
       } else {
         this.root.append(el("h2", { class: "lb-mp-title", text: `Joined · ${s.roomCode}` }));
         this.root.append(el("p", { class: "sub", text: "Waiting for host to start…" }));
