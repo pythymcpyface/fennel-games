@@ -43,6 +43,7 @@ import type { Puzzle } from "../../../src/games/lowball/types.ts";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — JSON import resolved via wrangler build
 import CONTENT_PACK_RAW from "../../../public/lowball.json" assert { type: "json" };
+import CONTENT_PACK_COUNTRIES_RAW from "../../../public/lowball-countries.json" assert { type: "json" };
 import { selectDailyPuzzleId } from "../../../src/games/lowball/engine.ts";
 
 // ---------------------------------------------------------------------------
@@ -58,19 +59,21 @@ interface ContentPack {
 
 // REQ-029: fail fast if pack is unavailable at startup
 const CONTENT_PACK = CONTENT_PACK_RAW as ContentPack;
+const CONTENT_PACK_COUNTRIES = CONTENT_PACK_COUNTRIES_RAW as ContentPack;
 if (!CONTENT_PACK || !Array.isArray(CONTENT_PACK.puzzles) || CONTENT_PACK.puzzles.length === 0) {
   throw new Error("[lowball-relay] Content pack missing or empty at startup");
 }
 
-function getPuzzleForDay(dayId: string): Puzzle | null {
+function getPuzzleForDay(dayId: string, gameId: RoomState["gameId"]): Puzzle | null {
+  const pack = gameId === "lowball-countries" ? CONTENT_PACK_COUNTRIES : CONTENT_PACK;
   const pid = selectDailyPuzzleId(
     dayId,
-    CONTENT_PACK.contentPackVersion,
-    CONTENT_PACK.datasetId,
-    CONTENT_PACK.puzzleCount,
+    pack.contentPackVersion,
+    pack.datasetId,
+    pack.puzzleCount,
   );
   if (!pid) return null;
-  return CONTENT_PACK.puzzles.find((p) => p.puzzleId === pid) ?? null;
+  return pack.puzzles.find((p) => p.puzzleId === pid) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +82,7 @@ function getPuzzleForDay(dayId: string): Puzzle | null {
 
 const MAX_PLAYERS = 4;
 const SWEEP_DEADLINE_MS = 30_000;
+const BETWEEN_SWEEPS_MS = 5_000;
 const SWEEPS_TOTAL = 2;
 const MAX_TIEBREAK_ROUNDS = 2;
 
@@ -107,6 +111,8 @@ function toPersisted(state: RoomState): PersistedRoomState {
 function fromPersisted(state: PersistedRoomState): RoomState {
   return {
     ...state,
+    // Rooms created before variant routing was introduced are standard Lowball.
+    gameId: state.gameId ?? "lowball",
     players: state.players.map((p) => ({ ...p, usedWords: new Set(p.usedWords) })),
   };
 }
@@ -213,8 +219,10 @@ export class LowballRelayDO implements DurableObject {
     // Initialise room state on first connection
     if (this.roomState === null) {
       const roomCode = url.pathname.split("/").pop() ?? "XXXXXX";
+      const requestedGameId = url.searchParams.get("gameId");
       this.roomState = {
         roomCode,
+        gameId: requestedGameId === "lowball-countries" ? "lowball-countries" : "lowball",
         players: [],
         phase: "lobby",
         sweepIndex: 0,
@@ -225,6 +233,15 @@ export class LowballRelayDO implements DurableObject {
       };
       // REQ-047: lifecycle log
       console.log(`[lowball-relay] room-created roomCode=${roomCode}`);
+    }
+
+    const requestedGameId = url.searchParams.get("gameId") ?? "lowball";
+    if (requestedGameId !== this.roomState.gameId) {
+      const { 0: mismatchClient, 1: mismatchServer } = new WebSocketPair();
+      this.state.acceptWebSocket(mismatchServer);
+      mismatchServer.send(JSON.stringify({ type: "error", reason: "GAME_VARIANT_MISMATCH" } satisfies ServerMessage));
+      mismatchServer.close(1008, "GAME_VARIANT_MISMATCH");
+      return new Response(null, { status: 101, webSocket: mismatchClient });
     }
 
     const existingNames = this.roomState.players.map((p) => p.displayName);
@@ -330,6 +347,11 @@ export class LowballRelayDO implements DurableObject {
       case "submit":
         this.handleSubmit(ws, slotIndex, msg.word);
         break;
+      case "next":
+        if (this.roomState.phase === "between-sweeps" && this.roomState.players.find((p) => p.slotIndex === slotIndex)?.isHost) {
+          await this.beginNextSweep();
+        }
+        break;
       default:
         // Unknown message type — no-op
         break;
@@ -394,6 +416,11 @@ export class LowballRelayDO implements DurableObject {
     if (this.roomState === null) return;
 
     const phase = this.roomState.phase;
+    if (phase === "between-sweeps") {
+      await this.beginNextSweep();
+      await this.save();
+      return;
+    }
     if (phase !== "sweep" && phase !== "tiebreak") return;
 
     // TURN-BASED: the alarm is the ACTIVE player's 30s expiring. Auto-blank only
@@ -456,7 +483,7 @@ export class LowballRelayDO implements DurableObject {
 
     // Select today's puzzle
     const dayId = this.todayId();
-    const p = getPuzzleForDay(dayId);
+    const p = getPuzzleForDay(dayId, this.roomState.gameId);
     if (!p) {
       ws.send(JSON.stringify({ type: "error", reason: "PUZZLE_NOT_FOUND" } satisfies ServerMessage));
       return;
@@ -492,7 +519,8 @@ export class LowballRelayDO implements DurableObject {
     if (this.puzzle !== null) return this.puzzle;
     const pid = this.roomState?.puzzleId;
     if (!pid) return null;
-    this.puzzle = CONTENT_PACK.puzzles.find((p) => p.puzzleId === pid) ?? null;
+    const pack = this.roomState?.gameId === "lowball-countries" ? CONTENT_PACK_COUNTRIES : CONTENT_PACK;
+    this.puzzle = pack.puzzles.find((p) => p.puzzleId === pid) ?? null;
     return this.puzzle;
   }
 
@@ -668,13 +696,25 @@ export class LowballRelayDO implements DurableObject {
     }
     const nextSweep = this.roomState.sweepIndex + 1;
     if (nextSweep < SWEEPS_TOTAL) {
-      this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: nextSweep };
-      const first = this.nextTurnSlot(-1);
-      if (first !== null) await this.beginTurn(first);
-      else await this.evaluateRoundEnd();
+      this.roomState = { ...this.roomState, phase: "between-sweeps", activePlayerSlot: -1 };
+      await this.state.storage.setAlarm(Date.now() + BETWEEN_SWEEPS_MS);
+      this.broadcastAll({
+        type: "between-sweeps",
+        nextSweepIndex: nextSweep,
+        deadlineTimestamp: Date.now() + BETWEEN_SWEEPS_MS,
+        canAdvance: true,
+      });
     } else {
       await this.evaluateRoundEnd();
     }
+  }
+
+  private async beginNextSweep(): Promise<void> {
+    if (this.roomState === null || this.roomState.phase !== "between-sweeps") return;
+    const nextSweep = this.roomState.sweepIndex + 1;
+    this.roomState = { ...this.roomState, phase: "sweep", sweepIndex: nextSweep };
+    const first = this.nextTurnSlot(-1);
+    if (first !== null) await this.beginTurn(first);
   }
 
   private async evaluateRoundEnd(): Promise<void> {

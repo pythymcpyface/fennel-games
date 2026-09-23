@@ -67,6 +67,7 @@ function makePlayers(count: number): PlayerRecord[] {
 function makeRoomState(playerCount = 2): RoomState {
   return {
     roomCode: "ABC123",
+    gameId: "lowball",
     players: makePlayers(playerCount),
     phase: "lobby",
     sweepIndex: 0,

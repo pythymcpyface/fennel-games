@@ -18,6 +18,10 @@ export interface Env {
   RELAY_BASE_URL?: string; // optional: used to construct invite links shown in DEPLOYMENT.md
 }
 
+function isGameId(value: string | null): value is "lowball" | "lowball-countries" {
+  return value === "lowball" || value === "lowball-countries";
+}
+
 /** Max display name length, mirroring the spec (REQ-005). */
 const MAX_NAME_LEN = 20;
 
@@ -82,7 +86,14 @@ export default {
         if (!(await roomExists(env, code))) break;
         code = generateCode();
       }
-      return Response.json({ roomCode: code }, {
+      let gameId: "lowball" | "lowball-countries" = "lowball";
+      try {
+        const body = await request.json() as { gameId?: string };
+        if (isGameId(body.gameId ?? null)) gameId = body.gameId;
+      } catch {
+        // Empty request bodies preserve the standard Lowball default.
+      }
+      return Response.json({ roomCode: code, gameId }, {
         headers: { "Access-Control-Allow-Origin": "*" },
       });
     }
@@ -115,10 +126,16 @@ export default {
         });
       }
 
+      const requestedGameId = url.searchParams.get("gameId");
+      const gameId: "lowball" | "lowball-countries" =
+        requestedGameId === "lowball-countries" ? requestedGameId : "lowball";
+
       // Route to the DO by room code name
       const id = env.LOWBALL_RELAY.idFromName(rawCode);
       const stub = env.LOWBALL_RELAY.get(id);
-      return stub.fetch(request);
+      const routedUrl = new URL(request.url);
+      routedUrl.searchParams.set("gameId", gameId);
+      return stub.fetch(new Request(routedUrl, request));
     }
 
     return new Response("Not found", { status: 404 });

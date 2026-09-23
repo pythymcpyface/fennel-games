@@ -28,6 +28,7 @@ export interface PlayerRecord {
 
 export interface RoomState {
   roomCode: string;
+  gameId: "lowball" | "lowball-countries";
   players: PlayerRecord[];
   phase: RoomPhase;
   sweepIndex: number; // 0 or 1 for main sweeps
@@ -75,6 +76,7 @@ export type ServerMessage =
   | { type: "player-list"; players: PlayerInfo[]; roomPlayerCount: number }
   | { type: "start"; puzzleId: string; categoryLabel: string; parValue: number; rule: CategoryRule }
   | { type: "sweep-start"; sweepIndex: number; sweepDeadlineTimestamp: number; activeSlot: number }
+  | { type: "between-sweeps"; nextSweepIndex: number; deadlineTimestamp: number; canAdvance: boolean }
   | { type: "tiebreak-start"; tiebreakRoundNumber: number; tiedSlots: number[]; sweepDeadlineTimestamp: number; activeSlot: number }
   | { type: "reveal"; reveal: SweepReveal }
   | { type: "leaderboard"; board: LeaderboardEntry[] }
@@ -89,4 +91,5 @@ export type ClientMessage =
   | { type: "create"; displayName: string }
   | { type: "join"; displayName: string }
   | { type: "start" }
-  | { type: "submit"; word: string };
+  | { type: "submit"; word: string }
+  | { type: "next" };

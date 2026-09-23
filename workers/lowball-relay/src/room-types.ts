@@ -28,6 +28,7 @@ export interface PlayerRecord {
 
 export interface RoomState {
   roomCode: string;
+  gameId: "lowball" | "lowball-countries";
   players: PlayerRecord[];
   phase: RoomPhase;
   sweepIndex: number; // 0 or 1 for main sweeps

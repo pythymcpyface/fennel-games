@@ -111,6 +111,7 @@ export type ClientEvent =
   | { kind: "player-list"; players: { slotIndex: number; displayName: string; isHost: boolean }[]; count: number }
   | { kind: "start"; categoryLabel: string; parValue: number; rule: CategoryRule }
   | { kind: "sweep-start"; sweepIndex: number; deadlineTs: number; activeSlot: number }
+  | { kind: "between-sweeps"; nextSweepIndex: number; deadlineTs: number; canAdvance: boolean }
   | { kind: "tiebreak-start"; round: number; tiedSlots: number[]; deadlineTs: number; activeSlot: number }
   | { kind: "reveal"; slotIndex: number; displayName: string; word: string | null; score: number; verdict: string; runningTotal: number }
   | { kind: "leaderboard"; board: MpLeaderboardEntry[] }
@@ -205,6 +206,10 @@ export class MultiplayerClient {
 
       case "sweep-start":
         this.handler({ kind: "sweep-start", sweepIndex: msg.sweepIndex, deadlineTs: msg.sweepDeadlineTimestamp, activeSlot: msg.activeSlot });
+        break;
+
+      case "between-sweeps":
+        this.handler({ kind: "between-sweeps", nextSweepIndex: msg.nextSweepIndex, deadlineTs: msg.deadlineTimestamp, canAdvance: msg.canAdvance });
         break;
 
       case "tiebreak-start":

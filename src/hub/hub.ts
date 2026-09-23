@@ -56,8 +56,8 @@ export class Hub {
     if (m) {
       const plugin = this.plugins.find((p) => p.meta.id === m[1]);
       if (plugin) {
-        // REQ-037: roomCode is only passed to lowball; all other games receive undefined.
-        void this.openGame(plugin, plugin.meta.id === "lowball" ? roomCode : undefined);
+        // Lowball variants use the room code to enter multiplayer; other games do not.
+        void this.openGame(plugin, plugin.meta.id.startsWith("lowball") ? roomCode : undefined);
         return;
       }
     }

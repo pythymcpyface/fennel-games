@@ -35,6 +35,8 @@ interface ContentPack {
 
 /** Milliseconds between tension-counter ticks. View-only concern (ADR-001). */
 const TICK_MS = 12;
+/** Multiplayer Pointless-style reveal: 100 points drain over five seconds. */
+const MP_REVEAL_TICK_MS = 50;
 
 /**
  * Relay WebSocket base URL (REQ-040).
@@ -105,6 +107,10 @@ function freshMpState(): MpState {
   };
 }
 
+export function buildInviteUrl(origin: string, pathname: string, gameId: string, roomCode: string): string {
+  return `${origin}${pathname}#/game/${gameId}?room=${roomCode}`;
+}
+
 class Lowball implements GameInstance {
   private pack!: ContentPack;
   private puzzle!: Puzzle;
@@ -122,9 +128,11 @@ class Lowball implements GameInstance {
   private mpClient: MultiplayerClient | null = null;
   private mpState: MpState = freshMpState();
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
+  private errorClearTimer: ReturnType<typeof setTimeout> | null = null;
   /** Tension-counter value for the multiplayer view (own score reveal). */
   private mpTickCounter = 0;
   private mpTickTimer: ReturnType<typeof setInterval> | null = null;
+  private mpRevealPauseTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -575,7 +583,7 @@ class Lowball implements GameInstance {
     this.mpState = { ...this.mpState, myDisplayName: displayName };
 
     // Pass displayName in a query param (Worker reads it before routing to DO)
-    const urlWithName = `${wsUrl}?name=${encodeURIComponent(displayName)}`;
+    const urlWithName = `${wsUrl}?name=${encodeURIComponent(displayName)}&gameId=${encodeURIComponent(this.gameId)}`;
     client.connect(urlWithName);
   }
 
@@ -633,6 +641,18 @@ class Lowball implements GameInstance {
         this.startMpCountdown();
         break;
 
+      case "between-sweeps":
+        this.mpState = {
+          ...this.mpState,
+          deadlineTs: event.deadlineTs,
+          activeSlot: -1,
+          submissions: this.mpState.submissions,
+        };
+        this.stopMpTicking();
+        this.renderLiveRound();
+        this.startMpCountdown();
+        break;
+
       case "tiebreak-start":
         this.mpState = {
           ...this.mpState,
@@ -662,7 +682,7 @@ class Lowball implements GameInstance {
         this.updateLiveReveal(event.slotIndex);
         // REQ-051: animate the tension counter for this player's OWN reveal only.
         if (event.slotIndex === this.mpState.mySlotIndex) {
-          this.startMpTicking(event.score);
+          this.startMpTicking(event.score, event.verdict);
         }
         break;
       }
@@ -681,6 +701,7 @@ class Lowball implements GameInstance {
 
       case "error":
         this.mpState = { ...this.mpState, errorMsg: event.reason };
+        this.clearMpErrorSoon();
         if (this.mpState.phase === "round-active") {
           this.renderLiveRound();
         } else {
@@ -691,6 +712,7 @@ class Lowball implements GameInstance {
       case "close":
         if (event.code !== 1000) {
           this.mpState = { ...this.mpState, errorMsg: `Disconnected (${event.reason || event.code})` };
+          this.clearMpErrorSoon();
           if (this.mpState.phase === "round-active") {
             this.renderLiveRound();
           } else {
@@ -699,6 +721,15 @@ class Lowball implements GameInstance {
         }
         break;
     }
+  }
+
+  private clearMpErrorSoon(): void {
+    if (this.errorClearTimer !== null) clearTimeout(this.errorClearTimer);
+    this.errorClearTimer = setTimeout(() => {
+      this.errorClearTimer = null;
+      this.mpState = { ...this.mpState, errorMsg: "" };
+      if (this.root.isConnected) this.renderLobby();
+    }, 4000);
   }
 
   // -------------------------------------------------------------------------
@@ -776,12 +807,16 @@ class Lowball implements GameInstance {
       clearInterval(this.mpTickTimer);
       this.mpTickTimer = null;
     }
+    if (this.mpRevealPauseTimer !== null) {
+      clearTimeout(this.mpRevealPauseTimer);
+      this.mpRevealPauseTimer = null;
+    }
   }
 
   /** Animate the counter from 0 up to `target`, then stop. */
-  private startMpTicking(target: number): void {
+  private startMpTicking(target: number, verdict: string): void {
     this.stopMpTicking();
-    this.mpTickCounter = 0;
+    this.mpTickCounter = MAX_PANEL_SCORE;
     this.paintMpCounter();
     if (this.reducedMotion) {
       // Respect prefers-reduced-motion: jump straight to the final value.
@@ -789,15 +824,24 @@ class Lowball implements GameInstance {
       this.paintMpCounter();
       return;
     }
+    if (target === MAX_PANEL_SCORE && verdict !== "VALID") {
+      const num = this.root.querySelector(".lb-score-num");
+      if (num !== null) num.textContent = "X";
+      this.mpRevealPauseTimer = setTimeout(() => {
+        this.mpRevealPauseTimer = null;
+        if (this.root.isConnected) this.paintMpCounter();
+      }, 450);
+      return;
+    }
     this.mpTickTimer = setInterval(() => {
-      if (!this.root.isConnected || this.mpTickCounter >= target) {
-        this.mpTickCounter = Math.min(this.mpTickCounter, target);
+      if (!this.root.isConnected || this.mpTickCounter <= target) {
+        this.mpTickCounter = Math.max(this.mpTickCounter, target);
         this.stopMpTicking();
         return;
       }
-      this.mpTickCounter += 1;
+      this.mpTickCounter -= 1;
       this.paintMpCounter();
-    }, TICK_MS);
+    }, MP_REVEAL_TICK_MS);
   }
 
   /** Repaint only the counter bars/readout, without rebuilding the view. */
@@ -855,6 +899,7 @@ class Lowball implements GameInstance {
         const v = validateDisplayName(nameInput.value);
         if (!v.valid) {
           this.mpState = { ...this.mpState, errorMsg: v.error ?? "Invalid name." };
+          this.clearMpErrorSoon();
           // Re-render to show error (REQ-004)
           this.renderLobby();
           // Announce for screen readers
@@ -894,6 +939,7 @@ class Lowball implements GameInstance {
         const v = validateDisplayName(joinNameInput.value);
         if (!v.valid) {
           this.mpState = { ...this.mpState, errorMsg: v.error ?? "Invalid name." };
+          this.clearMpErrorSoon();
           this.renderLobby();
           live.textContent = v.error ?? "Invalid name.";
           return;
@@ -901,6 +947,7 @@ class Lowball implements GameInstance {
         const code = normalizeRoomCode(codeInput.value);
         if (!/^[A-Z0-9]{6}$/.test(code)) {
           this.mpState = { ...this.mpState, errorMsg: "Enter a valid 6-character room code." };
+          this.clearMpErrorSoon();
           this.renderLobby();
           live.textContent = "Enter a valid 6-character room code.";
           return;
@@ -929,7 +976,7 @@ class Lowball implements GameInstance {
       // In lobby — connected, waiting for players or for host to start
       // REQ-038: show invite link if host
       if (s.isHost && s.roomCode) {
-        const inviteUrl = `${window.location.origin}${window.location.pathname}#/game/lowball?room=${s.roomCode}`;
+        const inviteUrl = buildInviteUrl(window.location.origin, window.location.pathname, this.gameId, s.roomCode);
         this.root.append(el("h2", { class: "lb-mp-title", text: "Room ready" }));
         this.root.append(el("p", { class: "sub", text: `Room code: ${s.roomCode}` }));
 
@@ -958,6 +1005,10 @@ class Lowball implements GameInstance {
               const ok = document.execCommand("copy");
               document.body.removeChild(ta);
               this.live.textContent = ok ? "Link copied." : "Copy failed — paste manually.";
+              if (ok) {
+                copyBtn.textContent = "Link copied";
+                setTimeout(() => { copyBtn.textContent = "Copy invite link"; }, 2500);
+              }
             } catch {
               this.live.textContent = "Copy failed — paste manually.";
             }
@@ -965,7 +1016,11 @@ class Lowball implements GameInstance {
 
           if (typeof navigator.clipboard?.writeText === "function") {
             navigator.clipboard.writeText(inviteUrl).then(
-              () => { this.live.textContent = "Link copied."; },
+              () => {
+                this.live.textContent = "Link copied.";
+                copyBtn.textContent = "Link copied";
+                setTimeout(() => { copyBtn.textContent = "Copy invite link"; }, 2500);
+              },
               fallbackCopy,
             );
           } else {
@@ -1118,7 +1173,16 @@ class Lowball implements GameInstance {
     const isMyTurn = s.activeSlot === s.mySlotIndex;
     const iAmTiedActive = !isTiebreak || s.tiedSlots.includes(s.mySlotIndex);
     const iHaveSubmitted = s.submissions.has(s.mySlotIndex);
-    if (isMyTurn && iAmTiedActive && !iHaveSubmitted) {
+    const betweenSweeps = s.activeSlot === -1 && s.sweepIndex === 0 && s.submissions.size > 0;
+    if (betweenSweeps) {
+      this.root.append(el("p", { class: "sub", text: "Sweep complete. Review the answers before the next sweep." }));
+      if (s.isHost) {
+        const nextBtn = el("button", { text: "Next sweep", class: "btn" }) as HTMLButtonElement;
+        nextBtn.type = "button";
+        nextBtn.addEventListener("click", () => this.mpClient?.send({ type: "next" }));
+        this.root.append(nextBtn);
+      }
+    } else if (isMyTurn && iAmTiedActive && !iHaveSubmitted) {
       const form = el("form", { class: "row" }) as HTMLFormElement;
       const input = el("input", { class: "text-input" }) as HTMLInputElement;
       input.id = "lb-mp-answer";
