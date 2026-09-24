@@ -133,6 +133,13 @@ class Lowball implements GameInstance {
   private mpTickCounter = 0;
   private mpTickTimer: ReturnType<typeof setInterval> | null = null;
   private mpRevealPauseTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Deferred work queued while a reveal animation is in flight.
+   * When the sweep-start event arrives before the animation completes, we must
+   * not kill the animation mid-play (that's the bug). Instead we save the DOM
+   * rebuild here and fire it the moment the interval reaches its target.
+   */
+  private onMpTickComplete: (() => void) | null = null;
 
   constructor(
     private readonly root: HTMLElement,
@@ -809,6 +816,7 @@ class Lowball implements GameInstance {
       clearTimeout(this.mpRevealPauseTimer);
       this.mpRevealPauseTimer = null;
     }
+    this.onMpTickComplete = null;
   }
 
   /** Animate the counter from 0 up to `target`, then stop. */
@@ -834,7 +842,10 @@ class Lowball implements GameInstance {
     this.mpTickTimer = setInterval(() => {
       if (!this.root.isConnected || this.mpTickCounter <= target) {
         this.mpTickCounter = Math.max(this.mpTickCounter, target);
+        // Grab and clear the callback BEFORE stopMpTicking nulls it.
+        const onComplete = this.onMpTickComplete;
         this.stopMpTicking();
+        if (onComplete && this.root.isConnected) onComplete();
         return;
       }
       this.mpTickCounter -= 1;
