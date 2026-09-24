@@ -667,9 +667,22 @@ class Lowball implements GameInstance {
           activeSlot: -1,
           submissions: this.mpState.submissions,
         };
-        this.stopMpTicking();
-        this.renderLiveRound();
-        this.startMpCountdown();
+        // BUG-FIX (mp-anim-v2 BUG-1): the last player in a sweep triggers
+        // between-sweeps (not sweep-start) immediately after their reveal.
+        // Applying the same onMpTickComplete deferral here ensures their
+        // animation plays in full before the DOM is rebuilt.
+        if (this.mpTickTimer !== null) {
+          this.onMpTickComplete = () => {
+            this.mpTickCounter = 0;
+            this.renderLiveRound();
+            this.startMpCountdown();
+          };
+        } else {
+          this.stopMpTicking();
+          this.mpTickCounter = 0;
+          this.renderLiveRound();
+          this.startMpCountdown();
+        }
         break;
 
       case "tiebreak-start":
@@ -700,6 +713,11 @@ class Lowball implements GameInstance {
         this.mpState = { ...this.mpState, submissions: updated };
         this.updateLiveReveal(event.slotIndex);
         // REQ-051: every player watches each answer reveal, like the show.
+        // BUG-FIX (mp-anim-v2 BUG-2+3): freeze the countdown during the
+        // animation so it doesn't tick down while bars are draining. The
+        // deferred sweep-start/between-sweeps callback restarts it with the
+        // fresh 30s deadline once the animation completes.
+        this.stopMpCountdown();
         this.startMpTicking(event.score, event.verdict);
         break;
       }
