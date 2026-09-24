@@ -41,6 +41,10 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
+        // Content packs (e.g. ladderless.json with the en-GB accept-list) exceed
+        // the 2 MiB default; raise so the offline-first PWA precaches them.
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
       },
       manifest: {
         name: "Fennel Games",
@@ -54,12 +58,6 @@ export default defineConfig({
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
         ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
-        // Content packs (e.g. ladderless.json with the en-GB accept-list) exceed
-        // the 2 MiB default; raise so the offline-first PWA precaches them.
-        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
       },
     }),
   ],
