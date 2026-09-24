@@ -641,11 +641,23 @@ class Lowball implements GameInstance {
             : this.mpState.submissions,
           tiebreakRound: 0,
         };
-        // Reset the tension counter for the new sweep (REQ-051).
-        this.stopMpTicking();
-        this.mpTickCounter = 0;
-        this.renderLiveRound();
-        this.startMpCountdown();
+        // BUG-FIX (mp-anim-timer): if the reveal animation is still running,
+        // defer the DOM rebuild until it completes so the full 5s drain is
+        // visible. Without this, sweep-start arriving immediately after reveal
+        // kills the animation before it plays. The counter and timer reset still
+        // happen — just after the animation, not before it.
+        if (this.mpTickTimer !== null) {
+          this.onMpTickComplete = () => {
+            this.mpTickCounter = 0;
+            this.renderLiveRound();
+            this.startMpCountdown();
+          };
+        } else {
+          this.stopMpTicking();
+          this.mpTickCounter = 0;
+          this.renderLiveRound();
+          this.startMpCountdown();
+        }
         break;
 
       case "between-sweeps":
