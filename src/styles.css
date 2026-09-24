@@ -739,6 +739,64 @@ button { font-family: inherit; }
 .lb-badge-findable { background: var(--cds-support-success, #24a148); color: #000; }
 .lb-badge-obscure { background: var(--cds-layer-02, #393939); color: var(--cds-text-helper); border: 1px solid var(--cds-border-subtle-01); }
 
+/* Score result overlay — shown over the counter after a reveal.
+   .lb-result-cross = red ✕ (score 100, wrong answer), 3s then auto-removes.
+   .lb-result-tick  = green ✓ (score 0, perfect), with celebration keyframe. */
+.lb-result-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  font-size: 72px; line-height: 1;
+  border-radius: 8px;
+}
+.lb-counter { position: relative; } /* anchor for the overlay */
+.lb-result-cross {
+  color: var(--cds-support-error, #fa4d56);
+  animation: lb-cross-in var(--duration-moderate-02) var(--ease-entrance) both;
+}
+.lb-result-tick {
+  color: var(--cds-support-success, #42be65);
+  animation: lb-tick-in var(--duration-moderate-02) var(--ease-entrance) both,
+             lb-tick-celebrate 0.6s var(--ease-entrance) 0.15s both;
+}
+@keyframes lb-cross-in {
+  from { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes lb-tick-in {
+  from { opacity: 0; transform: scale(0.4); }
+  60%  { transform: scale(1.25); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes lb-tick-celebrate {
+  0%   { filter: drop-shadow(0 0 0px var(--cds-support-success)); }
+  50%  { filter: drop-shadow(0 0 14px var(--cds-support-success)); }
+  100% { filter: drop-shadow(0 0 0px var(--cds-support-success)); }
+}
+/* Confetti burst for perfect score (score=0) */
+.lb-result-tick::after {
+  content: '';
+  position: absolute; inset: -24px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--cds-support-success) 30%, transparent) 0%, transparent 70%);
+  animation: lb-burst 0.7s var(--ease-entrance) both;
+  pointer-events: none;
+}
+@keyframes lb-burst {
+  from { opacity: 0; transform: scale(0.2); }
+  50%  { opacity: 1; transform: scale(1.4); }
+  to   { opacity: 0; transform: scale(1.8); }
+}
+/* WhatsApp share button */
+.lb-whatsapp-btn {
+  display: inline-flex; align-items: center; gap: var(--spacing-03);
+  background: #25D366; color: #000;
+  border: none; border-radius: 8px;
+  padding: var(--spacing-03) var(--spacing-05);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.lb-whatsapp-btn:hover { background: #1ebe5d; }
+.lb-whatsapp-btn:focus-visible { outline: 2px solid var(--cds-focus); outline-offset: 2px; }
+
 /* ===========================================================================
    Lowball Multiplayer (lb-mp-*) — REQ-044, REQ-061, REQ-043, REQ-048
    Prefixed separately so single-player lb-* classes are never accidentally

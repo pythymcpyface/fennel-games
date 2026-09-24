@@ -849,6 +849,17 @@ class Lowball implements GameInstance {
     this.onMpTickComplete = null;
   }
 
+  /** Show a result overlay (✕ or ✓) on the counter and auto-remove after `durationMs`. */
+  private showResultOverlay(symbol: string, cssClass: string, durationMs: number): void {
+    const counter = this.root.querySelector(".lb-counter");
+    if (!counter) return;
+    // Remove any prior overlay
+    counter.querySelector(".lb-result-overlay")?.remove();
+    const overlay = el("div", { class: `lb-result-overlay ${cssClass}`, text: symbol });
+    counter.append(overlay);
+    setTimeout(() => overlay.remove(), durationMs);
+  }
+
   /** Animate the counter from 0 up to `target`, then stop. */
   private startMpTicking(target: number, verdict: string): void {
     this.stopMpTicking();
@@ -858,9 +869,17 @@ class Lowball implements GameInstance {
       // Respect prefers-reduced-motion: jump straight to the final value.
       this.mpTickCounter = target;
       this.paintMpCounter();
+      // Still show the overlay even without animation.
+      if (target === MAX_PANEL_SCORE && verdict !== "VALID") {
+        this.showResultOverlay("✕", "lb-result-cross", 3000);
+      } else if (target === 0) {
+        this.showResultOverlay("✓", "lb-result-tick", 3000);
+      }
       return;
     }
     if (target === MAX_PANEL_SCORE && verdict !== "VALID") {
+      // Wrong answer: show red ✕ overlay for 3s, bars stay full.
+      this.showResultOverlay("✕", "lb-result-cross", 3000);
       const num = this.root.querySelector(".lb-score-num");
       if (num !== null) num.textContent = "X";
       this.mpRevealPauseTimer = setTimeout(() => {
@@ -875,6 +894,10 @@ class Lowball implements GameInstance {
         // Grab and clear the callback BEFORE stopMpTicking nulls it.
         const onComplete = this.onMpTickComplete;
         this.stopMpTicking();
+        // Perfect score (0): show green ✓ with celebration after drain.
+        if (target === 0 && this.root.isConnected) {
+          this.showResultOverlay("✓", "lb-result-tick", 3000);
+        }
         if (onComplete && this.root.isConnected) onComplete();
         return;
       }
@@ -1333,6 +1356,25 @@ class Lowball implements GameInstance {
       void this.doMpShare(board, null);
     });
     this.root.append(shareBtn);
+
+    // WhatsApp share — mobile only (touchscreen device heuristic).
+    // wa.me/?text= is the universal WhatsApp share deep-link; it opens the app
+    // on mobile and wa.me web on desktop. Show on touch devices where the
+    // native share sheet may not include WhatsApp.
+    const isTouchDevice =
+      typeof window !== "undefined" &&
+      ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    if (isTouchDevice) {
+      const waBtn = el("button", { class: "lb-whatsapp-btn", text: "📲 Share on WhatsApp" }) as HTMLButtonElement;
+      waBtn.type = "button";
+      waBtn.setAttribute("aria-label", "Share result on WhatsApp");
+      waBtn.addEventListener("click", () => {
+        const text = buildMpShareText(board, this.mpState.mySlotIndex, this.dayId, this.gameTitle);
+        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+      this.root.append(waBtn);
+    }
 
     // Play again / back to solo
     const soloBtn = el("button", { text: "Play solo", class: "btn btn-secondary" }) as HTMLButtonElement;
