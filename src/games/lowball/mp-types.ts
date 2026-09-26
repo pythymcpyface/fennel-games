@@ -93,3 +93,22 @@ export type ClientMessage =
   | { type: "start" }
   | { type: "submit"; word: string }
   | { type: "next" };
+
+// ---------------------------------------------------------------------------
+// Reveal timing — shared by the client (animation) and relay (turn deadlines)
+// so the next player's 30s never starts ticking while everyone is still
+// watching the previous answer drain (REQ-FIX-001 / REQ-FIX-004).
+// ---------------------------------------------------------------------------
+
+/** Length of one player's turn. */
+export const MP_TURN_MS = 30_000;
+/** One bar of the 100-bar column drains every 50 ms (5s for a full drain). */
+export const MP_REVEAL_TICK_MS = 50;
+/** How long the final score (and its ✕ / celebration) is held after draining. */
+export const MP_RESULT_HOLD_MS = 2_000;
+
+/** Wall-clock length of the reveal for `score`: drain from 100 down, then hold. */
+export function revealDurationMs(score: number): number {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  return (100 - clamped) * MP_REVEAL_TICK_MS + MP_RESULT_HOLD_MS;
+}

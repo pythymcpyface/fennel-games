@@ -739,46 +739,58 @@ button { font-family: inherit; }
 .lb-badge-findable { background: var(--cds-support-success, #24a148); color: #000; }
 .lb-badge-obscure { background: var(--cds-layer-02, #393939); color: var(--cds-text-helper); border: 1px solid var(--cds-border-subtle-01); }
 
-/* Score result overlay — shown over the counter after a reveal.
-   .lb-result-cross = red ✕ (score 100, wrong answer), 3s then auto-removes.
-   .lb-result-tick  = green ✓ (score 0, perfect), with celebration keyframe. */
+/* Score result overlay — shown over the counter after a reveal (REQ-FIX-005).
+   .lb-result-cross = big red ✕ (score 100: wrong answer / timeout).
+   .lb-result-tick  = pointless 0: ✓ + "Pointless!" + glow burst; confetti comes
+   from kit/juice.ts celebrate(). Stays until the view re-renders. Under reduced
+   motion the global kill-switch removes the keyframes; the static symbol remains. */
+.lb-counter { position: relative; overflow: visible; } /* anchor for the overlay */
 .lb-result-overlay {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute; inset: -8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   pointer-events: none;
-  font-size: 72px; line-height: 1;
-  border-radius: 8px;
+  line-height: 1;
+  border-radius: 12px;
+  z-index: 2;
 }
-.lb-counter { position: relative; } /* anchor for the overlay */
 .lb-result-cross {
   color: var(--cds-support-error, #fa4d56);
-  animation: lb-cross-in var(--duration-moderate-02) var(--ease-entrance) both;
+  font-size: 128px; font-weight: 900;
+  background: color-mix(in srgb, var(--cds-support-error, #fa4d56) 14%, transparent);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--cds-support-error, #fa4d56) 60%, transparent);
+  animation: lb-cross-in 320ms var(--ease-entrance) both;
 }
 .lb-result-tick {
   color: var(--cds-support-success, #42be65);
-  animation: lb-tick-in var(--duration-moderate-02) var(--ease-entrance) both,
-             lb-tick-celebrate 0.6s var(--ease-entrance) 0.15s both;
+  background: color-mix(in srgb, var(--cds-support-success, #42be65) 14%, transparent);
+  animation: lb-tick-in 420ms var(--ease-entrance) both,
+             lb-tick-celebrate 0.9s var(--ease-entrance) 0.2s 2 both;
+}
+.lb-result-symbol { font-size: 88px; font-weight: 900; }
+.lb-result-label {
+  font-size: 22px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  margin-top: var(--spacing-02);
 }
 @keyframes lb-cross-in {
-  from { opacity: 0; transform: scale(0.4) rotate(-20deg); }
-  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+  0%   { opacity: 0; transform: scale(2.2) rotate(-25deg); }
+  60%  { opacity: 1; transform: scale(0.9) rotate(4deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 @keyframes lb-tick-in {
-  from { opacity: 0; transform: scale(0.4); }
-  60%  { transform: scale(1.25); }
+  from { opacity: 0; transform: scale(0.3); }
+  60%  { transform: scale(1.2); }
   to   { opacity: 1; transform: scale(1); }
 }
 @keyframes lb-tick-celebrate {
   0%   { filter: drop-shadow(0 0 0px var(--cds-support-success)); }
-  50%  { filter: drop-shadow(0 0 14px var(--cds-support-success)); }
+  50%  { filter: drop-shadow(0 0 18px var(--cds-support-success)); }
   100% { filter: drop-shadow(0 0 0px var(--cds-support-success)); }
 }
-/* Confetti burst for perfect score (score=0) */
 .lb-result-tick::after {
   content: '';
   position: absolute; inset: -24px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--cds-support-success) 30%, transparent) 0%, transparent 70%);
-  animation: lb-burst 0.7s var(--ease-entrance) both;
+  background: radial-gradient(circle, color-mix(in srgb, var(--cds-support-success) 35%, transparent) 0%, transparent 70%);
+  animation: lb-burst 0.8s var(--ease-entrance) both;
   pointer-events: none;
 }
 @keyframes lb-burst {

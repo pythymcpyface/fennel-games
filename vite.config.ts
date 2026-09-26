@@ -38,6 +38,7 @@ export default defineConfig({
       // autoUpdate + skipWaiting/clientsClaim activates the new SW immediately.
       registerType: "autoUpdate",
       injectRegister: "auto",
+      includeAssets: ["favicon.svg", "favicon.ico", "icons/apple-touch-icon.png"],
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
@@ -57,6 +58,7 @@ export default defineConfig({
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
     }),
