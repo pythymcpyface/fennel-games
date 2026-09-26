@@ -117,6 +117,16 @@ export function buildInviteUrl(origin: string, pathname: string, gameId: string,
   return `${origin}${pathname}#/game/${gameId}?room=${roomCode}`;
 }
 
+/** wa.me deep link that opens WhatsApp with a room invite pre-filled. */
+export function buildWhatsAppInviteUrl(gameTitle: string, inviteUrl: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(`Join my ${gameTitle} game: ${inviteUrl}`)}`;
+}
+
+/** Touchscreen heuristic used to show the WhatsApp buttons (mobile browsers). */
+function isTouchDevice(): boolean {
+  return typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+}
+
 class Lowball implements GameInstance {
   private pack!: ContentPack;
   private puzzle!: Puzzle;
@@ -1161,6 +1171,17 @@ class Lowball implements GameInstance {
           }
         });
         this.root.append(copyBtn, copyStatus);
+
+        // WhatsApp invite — touch devices only, same rule as the results share.
+        if (isTouchDevice()) {
+          const waInvite = el("button", { class: "lb-whatsapp-btn", text: "📲 Share invite on WhatsApp" }) as HTMLButtonElement;
+          waInvite.type = "button";
+          waInvite.setAttribute("aria-label", "Share invite link on WhatsApp");
+          waInvite.addEventListener("click", () => {
+            window.open(buildWhatsAppInviteUrl(this.gameTitle, inviteUrl), "_blank", "noopener,noreferrer");
+          });
+          this.root.append(waInvite);
+        }
       } else {
         this.root.append(el("h2", { class: "lb-mp-title", text: `Joined · ${s.roomCode}` }));
         this.root.append(el("p", { class: "sub", text: "Waiting for host to start…" }));
@@ -1422,10 +1443,7 @@ class Lowball implements GameInstance {
     // wa.me/?text= is the universal WhatsApp share deep-link; it opens the app
     // on mobile and wa.me web on desktop. Show on touch devices where the
     // native share sheet may not include WhatsApp.
-    const isTouchDevice =
-      typeof window !== "undefined" &&
-      ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-    if (isTouchDevice) {
+    if (isTouchDevice()) {
       const waBtn = el("button", { class: "lb-whatsapp-btn", text: "📲 Share on WhatsApp" }) as HTMLButtonElement;
       waBtn.type = "button";
       waBtn.setAttribute("aria-label", "Share result on WhatsApp");
