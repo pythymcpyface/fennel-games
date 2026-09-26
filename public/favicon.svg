@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Fennel Games</title>
+  <!-- fronds: feathery fennel leaves -->
+  <g fill="none" stroke="#7bd88f" stroke-width="2.6" stroke-linecap="round">
+    <path d="M32 30 C31 20 28 12 24 4"/>
+    <path d="M32 30 C33 20 36 12 40 4"/>
+    <path d="M31 28 C25 22 18 18 10 16"/>
+    <path d="M33 28 C39 22 46 18 54 16"/>
+    <path d="M27.5 14 l-5 -2 M28.5 19 l-6 -1 M26 9 l-4 -3"/>
+    <path d="M36.5 14 l5 -2 M35.5 19 l6 -1 M38 9 l4 -3"/>
+    <path d="M21 21 l-2 -5 M16 18.5 l-1 -4"/>
+    <path d="M43 21 l2 -5 M48 18.5 l1 -4"/>
+  </g>
+  <!-- stalks -->
+  <g fill="none" stroke="#4fb86a" stroke-width="3.2" stroke-linecap="round">
+    <path d="M28 40 C28 34 30 31 32 29"/>
+    <path d="M36 40 C36 34 34 31 32 29"/>
+    <path d="M32 40 V29"/>
+  </g>
+  <!-- bulb -->
+  <path d="M32 62 C18 62 13 54 16 46 C18 41 24 38 32 38 C40 38 46 41 48 46 C51 54 46 62 32 62 Z"
+        fill="#e9f5d8" stroke="#a9cf84" stroke-width="2"/>
+  <path d="M25 40 C23 48 24 56 28 61 M39 40 C41 48 40 56 36 61 M32 39 V61"
+        fill="none" stroke="#bcd99c" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
