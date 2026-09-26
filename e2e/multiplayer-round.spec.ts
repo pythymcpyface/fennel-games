@@ -17,6 +17,21 @@
  */
 
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { selectDailyPuzzleId } from "../src/games/lowball/engine.ts";
+
+/** A valid, non-zero-scoring answer for today's relay puzzle (mirrors room.ts). */
+function todaysMidScoringAnswer(): { word: string; score: number } {
+  const pack = JSON.parse(readFileSync("public/lowball.json", "utf8")) as {
+    contentPackVersion: string; datasetId: string; puzzleCount: number;
+    puzzles: { puzzleId: string; answers: { word: string; panelScore: number }[] }[];
+  };
+  const dayId = new Date().toISOString().slice(0, 10);
+  const pid = selectDailyPuzzleId(dayId, pack.contentPackVersion, pack.datasetId, pack.puzzleCount);
+  const answers = pack.puzzles.find((p) => p.puzzleId === pid)?.answers ?? [];
+  const a = [...answers].sort((x, y) => y.panelScore - x.panelScore).find((x) => x.panelScore > 20 && x.panelScore < 100);
+  return { word: a?.word ?? "", score: a?.panelScore ?? 0 };
+}
 
 const IS_CI = !!process.env["CI"];
 
@@ -48,6 +63,20 @@ async function guestJoin(ctx: BrowserContext, inviteUrl: string, name = "GuestPl
   await p.getByRole("button", { name: /join room/i }).click();
   await expect(p.getByText(/joined/i)).toBeVisible({ timeout: 8000 });
   return p;
+}
+
+/**
+ * REQ-FIX-003: the room waits on the review screen after sweep 1 until the host
+ * clicks "Next sweep". Keeps clicking it (if shown) while waiting for `done`.
+ */
+async function hostAdvanceUntil(hostPage: Page, done: () => Promise<boolean>, timeoutMs: number) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    if (await done()) return;
+    const next = hostPage.getByRole("button", { name: /next sweep/i });
+    if (await next.isVisible().catch(() => false)) await next.click().catch(() => {});
+    await hostPage.waitForTimeout(500);
+  }
 }
 
 async function startRound(hostPage: Page, guestPage: Page) {
@@ -110,9 +139,13 @@ test.describe("Multiplayer round — full 2-player game", () => {
     await guestPage.locator("#lb-mp-answer").fill("rough");
     await guestPage.getByRole("button", { name: /submit/i }).click();
 
-    // After both submit, sweep 2 should start (input reappears)
-    await expect(page.locator("#lb-mp-answer")).toBeVisible({ timeout: 10_000 });
-    await expect(guestPage.locator("#lb-mp-answer")).toBeVisible({ timeout: 10_000 });
+    // After both submit the room holds for review until the host clicks
+    // "Next sweep" (REQ-FIX-003: no auto-advance), then sweep 2 starts.
+    await expect(guestPage.getByText(/sweep complete/i)).toBeVisible({ timeout: 15_000 });
+    await expect(guestPage.getByRole("button", { name: /next sweep/i })).toHaveCount(0);
+    await page.getByRole("button", { name: /next sweep/i }).click({ timeout: 15_000 });
+    await expect(page.locator("#lb-mp-answer")).toBeVisible({ timeout: 15_000 });
+    await expect(guestPage.getByText(/sweep 2 of 2/i)).toBeVisible({ timeout: 15_000 });
 
     await guestPage.close();
   });
@@ -141,8 +174,9 @@ test.describe("Multiplayer round — full 2-player game", () => {
       await guestPage.getByRole("button", { name: /submit/i }).click();
     }
 
-    // Leaderboard must appear (via early advance or alarm completion)
-    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 70_000 });
+    // Leaderboard must appear (host advances past the sweep-1 review)
+    await hostAdvanceUntil(page, () => page.locator(".lb-mp-leaderboard").isVisible(), 70_000);
+    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 5_000 });
     await expect(guestPage.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 10_000 });
 
     // Both should see the leaderboard
@@ -165,8 +199,9 @@ test.describe("Multiplayer round — full 2-player game", () => {
     const guestPage = await guestJoin(context, inviteUrl, "Bob");
     await startRound(page, guestPage);
 
-    // Wait for leaderboard (alarm fires fast in local dev)
-    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 70_000 });
+    // Wait for leaderboard (turn alarms + host advancing past the review)
+    await hostAdvanceUntil(page, () => page.locator(".lb-mp-leaderboard").isVisible(), 70_000);
+    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 5_000 });
 
     // Both players appear in the leaderboard
     await expect(page.locator(".lb-mp-leaderboard")).toContainText("Alice");
@@ -191,8 +226,9 @@ test.describe("Multiplayer round — full 2-player game", () => {
     const guestPage = await guestJoin(context, inviteUrl, "Bob");
     await startRound(page, guestPage);
 
-    // Wait for leaderboard (alarm fires fast in local dev)
-    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 70_000 });
+    // Wait for leaderboard (turn alarms + host advancing past the review)
+    await hostAdvanceUntil(page, () => page.locator(".lb-mp-leaderboard").isVisible(), 70_000);
+    await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole("button", { name: /share result/i })).toBeVisible();
 
     await expect(page.locator(".lb-mp-leaderboard")).toBeVisible({ timeout: 10_000 });
@@ -203,8 +239,8 @@ test.describe("Multiplayer round — full 2-player game", () => {
 
   test("auto-blank fires after 30s timeout for a player who does not submit", async ({ page, context }) => {
     // This test verifies the alarm mechanism but uses a long timeout
-    // Only run in CI or with --timeout 45000
-    test.setTimeout(45_000);
+    // Only run in CI or with --timeout 60000
+    test.setTimeout(60_000);
 
     const inviteUrl = await hostCreateRoom(page, "Alice");
     const guestPage = await guestJoin(context, inviteUrl, "Bob");
@@ -214,12 +250,10 @@ test.describe("Multiplayer round — full 2-player game", () => {
     await page.locator("#lb-mp-answer").fill("tough");
     await page.getByRole("button", { name: /submit/i }).click();
 
-    // After 30s, Bob should receive an auto-blank (timeout indicator)
-    // Both clients should advance to sweep 2
-    await expect(page.locator("#lb-mp-answer")).toBeVisible({ timeout: 35_000 });
-
-    // Bob's card should show "(timeout)"
-    await expect(page.locator(".lb-mp-card").nth(1)).toContainText(/timeout/i, { timeout: 35_000 });
+    // After 30s (+ reveal grace), Bob receives an auto-blank (timeout indicator)
+    // and the room holds on the sweep-1 review (REQ-FIX-003).
+    await expect(page.locator(".lb-mp-card").nth(1)).toContainText(/timeout/i, { timeout: 42_000 });
+    await expect(page.getByRole("button", { name: /next sweep/i })).toBeVisible({ timeout: 10_000 });
 
     await guestPage.close();
   });
@@ -299,6 +333,57 @@ test.describe("Multiplayer round — tension counter and countdown", () => {
     const secs = Number((txt ?? "").replace(/[^0-9]/g, ""));
     expect(secs).toBeGreaterThan(0);
     expect(secs).toBeLessThanOrEqual(30);
+
+    await guestPage.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// lowball-mp-reveal-pause: on a phone (reduced motion on, as many phones are)
+// every reveal drains, the countdown pauses, a 100 shows the big ✕, and the
+// sweep-1 review holds until the host clicks "Next sweep".
+// ---------------------------------------------------------------------------
+
+test.describe("Multiplayer round — reveal pause on mobile", () => {
+  test.use({ viewport: { width: 390, height: 664 }, hasTouch: true, isMobile: true, reducedMotion: "reduce" });
+
+  test("reveal drains with paused timer, ✕ on 100, review waits for host", async ({ page, context }) => {
+    test.setTimeout(60_000);
+    const inviteUrl = await hostCreateRoom(page, "Alice");
+    const guestPage = await guestJoin(context, inviteUrl, "Bob");
+    await startRound(page, guestPage);
+
+    // Host answers with a non-word → scores 100 → big ✕ for both players.
+    await page.locator("#lb-mp-answer").fill("zzzzq");
+    await page.getByRole("button", { name: /submit/i }).click();
+    await expect(guestPage.locator(".lb-result-cross")).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator(".lb-result-cross")).toBeVisible();
+    // Guest's input only appears once the reveal hold is over.
+    await expect(guestPage.locator("#lb-mp-answer")).toBeVisible({ timeout: 8_000 });
+    await expect(guestPage.locator(".lb-mp-countdown")).toHaveText("30s");
+
+    // Guest gives a real answer → the column animates down on the host's phone.
+    const answer = todaysMidScoringAnswer();
+    expect(answer.word).not.toBe("");
+    await guestPage.locator("#lb-mp-answer").fill(answer.word);
+    await guestPage.getByRole("button", { name: /submit/i }).click();
+    await expect(page.locator(".lb-mp-card").nth(1)).toContainText(answer.word, { timeout: 5_000 });
+    const frozen = await page.locator(".lb-mp-countdown").textContent();
+    await page.waitForTimeout(600);
+    const mid = Number(await page.locator(".lb-score-num").textContent());
+    expect(mid).toBeLessThan(100); // draining, not jumped, despite reduced motion
+    expect(mid).toBeGreaterThan(answer.score);
+    expect(await page.locator(".lb-mp-countdown").textContent()).toBe(frozen); // paused
+
+    // After the reveal, the review holds — no auto-advance.
+    await expect(page.getByText(/sweep complete/i)).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(7_000); // longer than the old 5s auto-advance
+    await expect(guestPage.getByText(/sweep complete/i)).toBeVisible();
+    await expect(guestPage.getByRole("button", { name: /next sweep/i })).toHaveCount(0);
+
+    await page.getByRole("button", { name: /next sweep/i }).click();
+    await expect(page.locator("#lb-mp-answer")).toBeVisible({ timeout: 5_000 });
+    await expect(guestPage.getByText(/sweep 2 of 2/i)).toBeVisible();
 
     await guestPage.close();
   });

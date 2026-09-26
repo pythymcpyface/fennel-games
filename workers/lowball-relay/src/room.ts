@@ -38,6 +38,7 @@ import type {
   ClientMessage,
   LeaderboardEntry,
 } from "../../../src/games/lowball/mp-types.ts";
+import { MP_TURN_MS, revealDurationMs } from "../../../src/games/lowball/mp-types.ts";
 import type { Puzzle } from "../../../src/games/lowball/types.ts";
 // REQ-029: content pack bundled at Worker build time.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -81,8 +82,9 @@ function getPuzzleForDay(dayId: string, gameId: RoomState["gameId"]): Puzzle | n
 // ---------------------------------------------------------------------------
 
 const MAX_PLAYERS = 4;
-const SWEEP_DEADLINE_MS = 30_000;
-const BETWEEN_SWEEPS_MS = 5_000;
+const SWEEP_DEADLINE_MS = MP_TURN_MS;
+// REQ-FIX-003: there is deliberately no between-sweeps auto-advance. The room
+// holds on the review screen until the host sends "next".
 const SWEEPS_TOTAL = 2;
 const MAX_TIEBREAK_ROUNDS = 2;
 
@@ -121,6 +123,11 @@ export class LowballRelayDO implements DurableObject {
   private state: DurableObjectState;
   private roomState: RoomState | null = null;
   private puzzle: Puzzle | null = null;
+  /**
+   * Reveal-animation grace (ms) to add to the next turn's deadline. Transient:
+   * set on a reveal and consumed synchronously by the beginTurn that follows.
+   */
+  private revealGraceMs = 0;
   /** True once roomState has been hydrated from storage in this wake cycle. */
   private loaded = false;
   // NOTE: wsToSlot removed — plain Map is lost on DO hibernation.
@@ -416,11 +423,8 @@ export class LowballRelayDO implements DurableObject {
     if (this.roomState === null) return;
 
     const phase = this.roomState.phase;
-    if (phase === "between-sweeps") {
-      await this.beginNextSweep();
-      await this.save();
-      return;
-    }
+    // REQ-FIX-003: a stale alarm must never auto-start the next sweep.
+    if (phase === "between-sweeps") return;
     if (phase !== "sweep" && phase !== "tiebreak") return;
 
     // TURN-BASED: the alarm is the ACTIVE player's 30s expiring. Auto-blank only
@@ -456,6 +460,7 @@ export class LowballRelayDO implements DurableObject {
     const list = isTiebreak ? p.tiebreakSweeps : p.sweeps;
     const last = list[list.length - 1];
     if (last?.verdict === "TIMEOUT") {
+      this.revealGraceMs = revealDurationMs(100);
       this.broadcastAll({
         type: "reveal",
         reveal: {
@@ -573,6 +578,10 @@ export class LowballRelayDO implements DurableObject {
       players: this.roomState.players.map((p) => p.slotIndex === slotIndex ? finalPlayer : p),
     };
 
+    // REQ-FIX-004: clients animate this reveal before showing the next turn, so
+    // the next deadline is pushed back by the reveal's length.
+    this.revealGraceMs = revealDurationMs(record.panelScore);
+
     // REQ-016: live reveal broadcast
     const runningTotal = finalPlayer.sweeps.reduce((sum, s) => sum + s.panelScore, 0);
     this.broadcastAll({
@@ -655,7 +664,10 @@ export class LowballRelayDO implements DurableObject {
   private async beginTurn(slot: number): Promise<void> {
     if (this.roomState === null) return;
     this.roomState = { ...this.roomState, activePlayerSlot: slot };
-    const deadline = Date.now() + SWEEP_DEADLINE_MS;
+    // REQ-FIX-004: the turn's 30s starts after the previous reveal finishes playing
+    // on clients (the client caps the displayed countdown at 30s).
+    const deadline = Date.now() + this.revealGraceMs + SWEEP_DEADLINE_MS;
+    this.revealGraceMs = 0;
     await this.state.storage.setAlarm(deadline);
     const isTiebreak = this.roomState.phase === "tiebreak";
     if (isTiebreak) {
@@ -696,12 +708,15 @@ export class LowballRelayDO implements DurableObject {
     }
     const nextSweep = this.roomState.sweepIndex + 1;
     if (nextSweep < SWEEPS_TOTAL) {
+      // REQ-FIX-003: wait for the host. Clear the finished turn's alarm so
+      // nothing can advance the room behind the host's back.
       this.roomState = { ...this.roomState, phase: "between-sweeps", activePlayerSlot: -1 };
-      await this.state.storage.setAlarm(Date.now() + BETWEEN_SWEEPS_MS);
+      this.revealGraceMs = 0;
+      await this.state.storage.deleteAlarm();
       this.broadcastAll({
         type: "between-sweeps",
         nextSweepIndex: nextSweep,
-        deadlineTimestamp: Date.now() + BETWEEN_SWEEPS_MS,
+        deadlineTimestamp: 0,
         canAdvance: true,
       });
     } else {

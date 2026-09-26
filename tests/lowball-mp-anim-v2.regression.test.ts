@@ -149,7 +149,6 @@ describe("mp-anim-v2 regression — between-sweeps deferral", () => {
 
     h.startMpTicking(30);
     // Inject observable into onMpTickComplete
-    const originalCallback = () => { h.mpTickCounter = 0; h.startMpCountdown(); };
     h.handleBetweenSweeps(); // queues onMpTickComplete
     // Override to also log
     const queued = h.onMpTickComplete!;

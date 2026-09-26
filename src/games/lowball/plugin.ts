@@ -25,6 +25,14 @@ import {
   type ClientEvent,
   type MpLeaderboardEntry,
 } from "./multiplayer-client.ts";
+import { MP_REVEAL_TICK_MS, MP_RESULT_HOLD_MS, MP_TURN_MS } from "./mp-types.ts";
+import { celebrate, shake } from "../../kit/juice.ts";
+
+/** Server events that drive the live round and must respect the reveal queue. */
+type RoundFlowEvent = Extract<
+  ClientEvent,
+  { kind: "sweep-start" | "between-sweeps" | "tiebreak-start" | "reveal" | "leaderboard" }
+>;
 
 interface ContentPack {
   contentPackVersion: string;
@@ -35,8 +43,6 @@ interface ContentPack {
 
 /** Milliseconds between tension-counter ticks. View-only concern (ADR-001). */
 const TICK_MS = 12;
-/** Multiplayer Pointless-style reveal: 100 points drain over five seconds. */
-const MP_REVEAL_TICK_MS = 50;
 
 /**
  * Relay WebSocket base URL (REQ-040).
@@ -132,14 +138,16 @@ class Lowball implements GameInstance {
   /** Tension-counter value for the multiplayer view (own score reveal). */
   private mpTickCounter = 0;
   private mpTickTimer: ReturnType<typeof setInterval> | null = null;
-  private mpRevealPauseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Timer for the post-drain result hold. */
+  private mpRevealTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True from the moment a reveal starts until its result hold has finished. */
+  private mpRevealBusy = false;
   /**
-   * Deferred work queued while a reveal animation is in flight.
-   * When the sweep-start event arrives before the animation completes, we must
-   * not kill the animation mid-play (that's the bug). Instead we save the DOM
-   * rebuild here and fire it the moment the interval reaches its target.
+   * REQ-FIX-002: round-flow events that arrived while a reveal was on screen,
+   * applied in order once it finishes (replaces the single onMpTickComplete
+   * slot, which only covered two event types and was dropped by a new reveal).
    */
-  private onMpTickComplete: (() => void) | null = null;
+  private mpQueue: Array<() => void> = [];
 
   constructor(
     private readonly root: HTMLElement,
@@ -279,9 +287,24 @@ class Lowball implements GameInstance {
     }
   }
 
+  /** Score of the sweep just submitted in single-player, or null before any. */
+  private lastSweepScore(): number | null {
+    const sweeps = this.state.players[this.state.activePlayerIndex]?.sweeps ?? [];
+    return sweeps.length === 0 ? null : sweeps[sweeps.length - 1].panelScore;
+  }
+
+  /** REQ-FIX-005 (single-player): ✕ / celebration once the drain reaches the score. */
+  private showSoloScoreEffect(): void {
+    const score = this.lastSweepScore();
+    if (score !== null) this.showScoreEffect(score);
+  }
+
   private startTicking(): void {
     this.stopTicking();
-    if (this.reducedMotion) return;
+    if (this.reducedMotion || this.state.tickCounter <= (this.state.tickTarget ?? 0)) {
+      this.showSoloScoreEffect();
+      return;
+    }
     this.timer = setInterval(() => {
       // The hub tears a game down by clearing its root's innerHTML, and
       // GameInstance exposes no unmount hook, so an interval started here would
@@ -294,6 +317,7 @@ class Lowball implements GameInstance {
       const next = advanceTick(this.state);
       if (next === this.state) {
         this.stopTicking();
+        this.showSoloScoreEffect();
         return;
       }
       this.state = next;
@@ -628,108 +652,21 @@ class Lowball implements GameInstance {
         this.renderLiveRound();
         break;
 
+      // REQ-FIX-002: every round-flow event goes through the reveal queue. While a
+      // reveal (drain + result hold) is on screen, later events wait their turn so
+      // the animation, the paused countdown and the ✕/celebration are all seen in
+      // full — on every device, whatever order or speed the frames arrive in.
       case "sweep-start":
-        this.mpState = {
-          ...this.mpState,
-          sweepIndex: event.sweepIndex,
-          deadlineTs: event.deadlineTs,
-          activeSlot: event.activeSlot,
-          // TURN-BASED: clear reveals only when a NEW sweep begins, so earlier
-          // players' answers stay on screen while later players take their turn.
-          submissions: event.activeSlot === this.firstTurnSlot(event.sweepIndex)
-            ? new Map()
-            : this.mpState.submissions,
-          tiebreakRound: 0,
-        };
-        // BUG-FIX (mp-anim-timer): if the reveal animation is still running,
-        // defer the DOM rebuild until it completes so the full 5s drain is
-        // visible. Without this, sweep-start arriving immediately after reveal
-        // kills the animation before it plays. The counter and timer reset still
-        // happen — just after the animation, not before it.
-        if (this.mpTickTimer !== null) {
-          this.onMpTickComplete = () => {
-            this.mpTickCounter = 0;
-            this.renderLiveRound();
-            this.startMpCountdown();
-          };
-        } else {
-          this.stopMpTicking();
-          this.mpTickCounter = 0;
-          this.renderLiveRound();
-          this.startMpCountdown();
-        }
-        break;
-
       case "between-sweeps":
-        this.mpState = {
-          ...this.mpState,
-          deadlineTs: event.deadlineTs,
-          activeSlot: -1,
-          submissions: this.mpState.submissions,
-        };
-        // BUG-FIX (mp-anim-v2 BUG-1): the last player in a sweep triggers
-        // between-sweeps (not sweep-start) immediately after their reveal.
-        // Applying the same onMpTickComplete deferral here ensures their
-        // animation plays in full before the DOM is rebuilt.
-        if (this.mpTickTimer !== null) {
-          this.onMpTickComplete = () => {
-            this.mpTickCounter = 0;
-            this.renderLiveRound();
-            this.startMpCountdown();
-          };
-        } else {
-          this.stopMpTicking();
-          this.mpTickCounter = 0;
-          this.renderLiveRound();
-          this.startMpCountdown();
-        }
-        break;
-
       case "tiebreak-start":
-        this.mpState = {
-          ...this.mpState,
-          tiebreakRound: event.round,
-          tiedSlots: event.tiedSlots,
-          deadlineTs: event.deadlineTs,
-          activeSlot: event.activeSlot,
-          submissions: this.mpState.tiebreakRound === event.round
-            ? this.mpState.submissions
-            : new Map(),
-        };
-        this.stopMpTicking();
-        this.mpTickCounter = 0;
-        this.renderLiveRound();
-        this.startMpCountdown();
-        break;
-
-      case "reveal": {
-        const updated = new Map(this.mpState.submissions);
-        updated.set(event.slotIndex, {
-          word: event.word,
-          score: event.score,
-          verdict: event.verdict,
-          runningTotal: event.runningTotal,
-        });
-        this.mpState = { ...this.mpState, submissions: updated };
-        this.updateLiveReveal(event.slotIndex);
-        // REQ-051: every player watches each answer reveal, like the show.
-        // BUG-FIX (mp-anim-v2 BUG-2+3): freeze the countdown during the
-        // animation so it doesn't tick down while bars are draining. The
-        // deferred sweep-start/between-sweeps callback restarts it with the
-        // fresh 30s deadline once the animation completes.
-        this.stopMpCountdown();
-        this.startMpTicking(event.score, event.verdict);
-        break;
-      }
-
+      case "reveal":
       case "leaderboard":
-        this.mpState = { ...this.mpState, phase: "round-done", leaderboard: event.board };
-        this.stopMpCountdown();
-        this.stopMpTicking();
-        this.renderLeaderboard();
+        this.runOrQueueMp(() => this.applyRoundEvent(event));
         break;
 
       case "host-left":
+        this.stopMpTicking();
+        this.stopMpCountdown();
         this.mpState = { ...this.mpState, errorMsg: "Host left — game ended." };
         this.renderLobby();
         break;
@@ -754,6 +691,98 @@ class Lowball implements GameInstance {
             this.renderLobby();
           }
         }
+        break;
+    }
+  }
+
+  /** Run `fn` now, or after the reveal currently on screen has finished. */
+  private runOrQueueMp(fn: () => void): void {
+    if (this.mpRevealBusy) this.mpQueue.push(fn);
+    else fn();
+  }
+
+  /** Reveal finished: release queued events in order until one starts a new reveal. */
+  private finishMpReveal(): void {
+    this.mpRevealBusy = false;
+    this.mpRevealTimer = null;
+    if (!this.root.isConnected) {
+      this.mpQueue = [];
+      return;
+    }
+    while (!this.mpRevealBusy && this.mpQueue.length > 0) {
+      const next = this.mpQueue.shift();
+      next?.();
+    }
+  }
+
+  /** Apply one round-flow server event. Only ever called when no reveal is playing. */
+  private applyRoundEvent(event: RoundFlowEvent): void {
+    switch (event.kind) {
+      case "sweep-start":
+        this.mpState = {
+          ...this.mpState,
+          sweepIndex: event.sweepIndex,
+          deadlineTs: event.deadlineTs,
+          activeSlot: event.activeSlot,
+          // TURN-BASED: clear reveals only when a NEW sweep begins, so earlier
+          // players' answers stay on screen while later players take their turn.
+          submissions: event.activeSlot === this.firstTurnSlot(event.sweepIndex)
+            ? new Map()
+            : this.mpState.submissions,
+          tiebreakRound: 0,
+        };
+        this.mpTickCounter = 0;
+        this.renderLiveRound();
+        this.startMpCountdown();
+        break;
+
+      case "between-sweeps":
+        // REQ-FIX-003: sweep complete — hold here for review. No countdown: the
+        // next sweep starts only when the host presses "Next sweep".
+        this.mpState = { ...this.mpState, deadlineTs: 0, activeSlot: -1 };
+        this.stopMpCountdown();
+        this.mpTickCounter = 0;
+        this.renderLiveRound();
+        break;
+
+      case "tiebreak-start":
+        this.mpState = {
+          ...this.mpState,
+          tiebreakRound: event.round,
+          tiedSlots: event.tiedSlots,
+          deadlineTs: event.deadlineTs,
+          activeSlot: event.activeSlot,
+          submissions: this.mpState.tiebreakRound === event.round
+            ? this.mpState.submissions
+            : new Map(),
+        };
+        this.mpTickCounter = 0;
+        this.renderLiveRound();
+        this.startMpCountdown();
+        break;
+
+      case "reveal": {
+        const updated = new Map(this.mpState.submissions);
+        updated.set(event.slotIndex, {
+          word: event.word,
+          score: event.score,
+          verdict: event.verdict,
+          runningTotal: event.runningTotal,
+        });
+        this.mpState = { ...this.mpState, submissions: updated };
+        this.updateLiveReveal(event.slotIndex);
+        // REQ-051 / REQ-FIX-001: everyone watches each answer drain, with the
+        // countdown frozen until the reveal (and anything queued behind it) is done.
+        this.stopMpCountdown();
+        this.startMpReveal(event.score);
+        break;
+      }
+
+      case "leaderboard":
+        this.mpState = { ...this.mpState, phase: "round-done", leaderboard: event.board };
+        this.stopMpCountdown();
+        this.stopMpTicking();
+        this.renderLeaderboard();
         break;
     }
   }
@@ -787,7 +816,10 @@ class Lowball implements GameInstance {
   }
 
   private mpSecondsLeft(): number {
-    return Math.max(0, Math.round((this.mpState.deadlineTs - Date.now()) / 1000));
+    // The relay adds a grace period for the reveal animation to each deadline
+    // (REQ-FIX-004); cap so a turn never reads more than its 30s.
+    const ms = Math.min(MP_TURN_MS, this.mpState.deadlineTs - Date.now());
+    return Math.max(0, Math.round(ms / 1000));
   }
 
   /**
@@ -837,73 +869,102 @@ class Lowball implements GameInstance {
   // player's own revealed score, matching the single-player reveal.
   // -------------------------------------------------------------------------
 
+  /** Cancel any reveal in flight and drop queued events (teardown / new session). */
   private stopMpTicking(): void {
     if (this.mpTickTimer !== null) {
       clearInterval(this.mpTickTimer);
       this.mpTickTimer = null;
     }
-    if (this.mpRevealPauseTimer !== null) {
-      clearTimeout(this.mpRevealPauseTimer);
-      this.mpRevealPauseTimer = null;
+    if (this.mpRevealTimer !== null) {
+      clearTimeout(this.mpRevealTimer);
+      this.mpRevealTimer = null;
     }
-    this.onMpTickComplete = null;
+    this.mpRevealBusy = false;
+    this.mpQueue = [];
   }
 
-  /** Show a result overlay (✕ or ✓) on the counter and auto-remove after `durationMs`. */
-  private showResultOverlay(symbol: string, cssClass: string, durationMs: number): void {
-    const counter = this.root.querySelector(".lb-counter");
-    if (!counter) return;
-    // Remove any prior overlay
-    counter.querySelector(".lb-result-overlay")?.remove();
-    const overlay = el("div", { class: `lb-result-overlay ${cssClass}`, text: symbol });
-    counter.append(overlay);
-    setTimeout(() => overlay.remove(), durationMs);
-  }
-
-  /** Animate the counter from 0 up to `target`, then stop. */
-  private startMpTicking(target: number, verdict: string): void {
-    this.stopMpTicking();
+  /**
+   * REQ-FIX-001: drain the column from 100 to `target`, then hold the result
+   * (with ✕ for a wrong answer / celebration for a pointless 0) for
+   * MP_RESULT_HOLD_MS. The view is "busy" for the whole time, so queued events
+   * cannot cut the reveal short.
+   *
+   * The drain is deliberately NOT skipped under prefers-reduced-motion: it is the
+   * game's scoring reveal (a counting number, not decorative motion), and skipping
+   * it was why phones with Reduce Motion / battery-saver saw no reveal and no
+   * pause at all. Decorative keyframes are still suppressed by the global CSS
+   * reduced-motion kill-switch.
+   */
+  private startMpReveal(target: number): void {
+    if (this.mpTickTimer !== null) clearInterval(this.mpTickTimer);
+    if (this.mpRevealTimer !== null) clearTimeout(this.mpRevealTimer);
+    this.mpTickTimer = null;
+    this.mpRevealTimer = null;
+    this.mpRevealBusy = true;
     this.mpTickCounter = MAX_PANEL_SCORE;
     this.paintMpCounter();
-    if (this.reducedMotion) {
-      // Respect prefers-reduced-motion: jump straight to the final value.
+    // On a phone the counter is often scrolled out of view behind the keyboard.
+    this.bringCounterIntoView();
+
+    const hold = (): void => {
+      this.mpTickTimer = null;
       this.mpTickCounter = target;
       this.paintMpCounter();
-      // Still show the overlay even without animation.
-      if (target === MAX_PANEL_SCORE && verdict !== "VALID") {
-        this.showResultOverlay("✕", "lb-result-cross", 3000);
-      } else if (target === 0) {
-        this.showResultOverlay("✓", "lb-result-tick", 3000);
-      }
-      return;
-    }
-    if (target === MAX_PANEL_SCORE && verdict !== "VALID") {
-      // Wrong answer: show red ✕ overlay for 3s, bars stay full.
-      this.showResultOverlay("✕", "lb-result-cross", 3000);
-      const num = this.root.querySelector(".lb-score-num");
-      if (num !== null) num.textContent = "X";
-      this.mpRevealPauseTimer = setTimeout(() => {
-        this.mpRevealPauseTimer = null;
-        if (this.root.isConnected) this.paintMpCounter();
-      }, 450);
+      this.showScoreEffect(target);
+      this.mpRevealTimer = setTimeout(() => this.finishMpReveal(), MP_RESULT_HOLD_MS);
+    };
+
+    if (target >= MAX_PANEL_SCORE) {
+      hold(); // nothing to drain — straight to the big ✕
       return;
     }
     this.mpTickTimer = setInterval(() => {
-      if (!this.root.isConnected || this.mpTickCounter <= target) {
-        this.mpTickCounter = Math.max(this.mpTickCounter, target);
-        // Grab and clear the callback BEFORE stopMpTicking nulls it.
-        const onComplete = this.onMpTickComplete;
+      if (!this.root.isConnected) {
         this.stopMpTicking();
-        // Perfect score (0): show green ✓ with celebration after drain.
-        if (target === 0 && this.root.isConnected) {
-          this.showResultOverlay("✓", "lb-result-tick", 3000);
-        }
-        if (onComplete && this.root.isConnected) onComplete();
         return;
       }
       this.mpTickCounter -= 1;
       this.paintMpCounter();
+      if (this.mpTickCounter <= target) {
+        if (this.mpTickTimer !== null) clearInterval(this.mpTickTimer);
+        hold();
+      }
     }, MP_REVEAL_TICK_MS);
+  }
+
+  private bringCounterIntoView(): void {
+    const counter = this.root.querySelector(".lb-counter");
+    if (!(counter instanceof HTMLElement) || typeof counter.scrollIntoView !== "function") return;
+    const r = counter.getBoundingClientRect();
+    const visible = r.top >= 0 && r.bottom <= (window.innerHeight || document.documentElement.clientHeight);
+    if (!visible) {
+      counter.scrollIntoView({ block: "center", behavior: this.reducedMotion ? "auto" : "smooth" });
+    }
+  }
+
+  /**
+   * REQ-FIX-005: big red ✕ for a scored 100 (wrong / timeout), celebration for a
+   * pointless 0. Shared by single-player and multiplayer, both variants.
+   */
+  private showScoreEffect(score: number): void {
+    const counter = this.root.querySelector(".lb-counter");
+    if (!(counter instanceof HTMLElement)) return;
+    counter.querySelector(".lb-result-overlay")?.remove();
+    if (score >= MAX_PANEL_SCORE) {
+      const overlay = el("div", { class: "lb-result-overlay lb-result-cross", text: "✕" });
+      overlay.setAttribute("aria-hidden", "true");
+      counter.append(overlay);
+      shake(counter);
+    } else if (score === 0) {
+      const overlay = el("div", { class: "lb-result-overlay lb-result-tick" });
+      overlay.setAttribute("aria-hidden", "true");
+      overlay.append(
+        el("span", { class: "lb-result-symbol", text: "✓" }),
+        el("span", { class: "lb-result-label", text: "Pointless!" }),
+      );
+      counter.append(overlay);
+      celebrate(counter);
+    }
   }
 
   /** Repaint only the counter bars/readout, without rebuilding the view. */
